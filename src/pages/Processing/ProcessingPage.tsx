@@ -95,7 +95,7 @@ export const ProcessingPage: React.FC = () => {
             </span>
             <span className="text-[11px] text-[#059669] font-mono">0 delayed</span>
           </div>
-          <div className="text-[11px] text-[#64748B] mt-1">docflow-high-prio & standard</div>
+          <div className="text-[11px] text-[#64748B] mt-1">prashn-high-prio & standard</div>
         </div>
 
         <div className="bg-white dark:bg-[#1E293B] border border-[#E2E8F0] dark:border-[#334155] rounded-[6px] p-4">

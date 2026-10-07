@@ -43,7 +43,7 @@ export const TopNav: React.FC<TopNavProps> = ({ onOpenMobileMenu }) => {
         </button>
 
         <nav className="flex items-center gap-2 text-[13px]">
-          <span className="text-[#64748B] dark:text-[#94A3B8]">DocFlow</span>
+          <span className="text-[#64748B] dark:text-[#94A3B8]">Prashn</span>
           <span className="text-[#CBD5E1] dark:text-[#475569]">/</span>
           <span className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] capitalize">
             {currentSection === 'qa' ? 'Document Q&A' : currentSection}

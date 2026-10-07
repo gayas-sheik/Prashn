@@ -9,7 +9,7 @@ export const AppLayout: React.FC = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
-    <div className="min-h-screen bg-docflow-canvas-light dark:bg-docflow-canvas-dark text-docflow-text-primary-light dark:text-docflow-text-primary-dark">
+    <div className="min-h-screen bg-prashn-canvas-light dark:bg-prashn-canvas-dark text-prashn-text-primary-light dark:text-prashn-text-primary-dark">
       {/* Desktop Sidebar */}
       <div className="hidden lg:block">
         <Sidebar

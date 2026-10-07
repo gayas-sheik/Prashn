@@ -12,13 +12,13 @@ export const mockActivityEvents: ActivityEvent[] = [
     details: 'Extracted 14 line items, 99.82% confidence across 4 pages',
     logJson: {
       traceId: 'trace-aws-88492-991',
-      engine: 'AWS Textract + DocFlow LayoutLMv3',
+      engine: 'AWS Textract + Prashn LayoutLMv3',
       pages: 4,
       latencyMs: 1840,
       confidence: 0.9982,
       fieldsExtracted: 10,
       tablesParsed: 1,
-      s3Destination: 's3://docflow-vault-east1/parsed/DOC-88492.json'
+      s3Destination: 's3://prashn-vault-east1/parsed/DOC-88492.json'
     }
   },
   {
@@ -35,7 +35,7 @@ export const mockActivityEvents: ActivityEvent[] = [
       responseLatencyMs: 420,
       vectorScore: 0.994,
       citedPages: [1],
-      model: 'DocFlow RAG Engine v2.1'
+      model: 'Prashn RAG Engine v2.1'
     }
   },
   {
@@ -45,10 +45,10 @@ export const mockActivityEvents: ActivityEvent[] = [
     documentName: 'Batch #4109 (3 files: store_014.jpg, form_102.pdf, invoice_01.pdf)',
     actor: 'API Webhook / S3 Drop',
     status: 'Processing',
-    details: 'Dispatched to docflow-high-prio SQS queue (visibility 30s)',
+    details: 'Dispatched to prashn-high-prio SQS queue (visibility 30s)',
     logJson: {
       batchId: 'BATCH-4109',
-      sqsQueue: 'arn:aws:sqs:us-east-1:109283948:docflow-high-prio',
+      sqsQueue: 'arn:aws:sqs:us-east-1:109283948:prashn-high-prio',
       filesCount: 3,
       totalBytes: 4440280
     }
@@ -83,7 +83,7 @@ export const mockActivityEvents: ActivityEvent[] = [
       detectedDpi: 72,
       minimumRequiredDpi: 150,
       retryCount: 3,
-      deadLetterQueue: 'docflow-dlq-failed-jobs'
+      deadLetterQueue: 'prashn-dlq-failed-jobs'
     }
   },
   {

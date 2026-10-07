@@ -54,12 +54,12 @@ export const ActivityPage: React.FC = () => {
     if (format === 'json') {
       content = JSON.stringify(filteredEvents, null, 2);
       mimeType = 'application/json';
-      filename = `docflow_activity_log_${Date.now()}.json`;
+      filename = `prashn_activity_log_${Date.now()}.json`;
     } else {
       content = 'ID,Timestamp,Event,Document,Actor,Status,Details\n' +
         filteredEvents.map(e => `"${e.id}","${e.timestamp}","${e.event}","${e.documentName}","${e.actor}","${e.status}","${e.details}"`).join('\n');
       mimeType = 'text/csv';
-      filename = `docflow_activity_log_${Date.now()}.csv`;
+      filename = `prashn_activity_log_${Date.now()}.csv`;
     }
 
     const blob = new Blob([content], { type: mimeType });
@@ -350,7 +350,7 @@ export const ActivityPage: React.FC = () => {
                 </div>
                 <div className="flex justify-between text-[#64748B]">
                   <span>S3 Ingestion Vault:</span>
-                  <span className="text-[#0F172A] dark:text-[#F8FAFC]">docflow-vault-east1</span>
+                  <span className="text-[#0F172A] dark:text-[#F8FAFC]">prashn-vault-east1</span>
                 </div>
                 <div className="flex justify-between text-[#64748B]">
                   <span>KMS Encryption:</span>

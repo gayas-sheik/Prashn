@@ -164,7 +164,7 @@ export const UploadPage: React.FC = () => {
             Automatic Classification Enabled:
           </span>{' '}
           <span className="text-[#334155] dark:text-[#CBD5E1]">
-            You do not need to specify document types manually. DocFlow's AWS Textract pipeline will automatically detect invoices, receipts, and structured forms upon ingestion.
+            You do not need to specify document types manually. Prashn's AWS Textract pipeline will automatically detect invoices, receipts, and structured forms upon ingestion.
           </span>
         </div>
       </div>

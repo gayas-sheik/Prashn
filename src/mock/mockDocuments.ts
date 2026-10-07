@@ -12,7 +12,7 @@ export const mockDocuments: DocumentItem[] = [
     processingDuration: '1.8s',
     confidence: 99.82,
     extractedSummary: '$12,840.50 · Amazon Web Services',
-    s3Uri: 's3://docflow-vault-east1/invoices/2024/10/INV-2024-88492.pdf',
+    s3Uri: 's3://prashn-vault-east1/invoices/2024/10/INV-2024-88492.pdf',
     sha256: '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08',
     pagesCount: 4,
     extractedFields: [
@@ -81,7 +81,7 @@ export const mockDocuments: DocumentItem[] = [
     processingDuration: '1.8s',
     confidence: 99.6,
     extractedSummary: '₹48,500 · ABC Technologies (INV-1045)',
-    s3Uri: 's3://docflow-vault-east1/invoices/2024/10/invoice_oct_01.pdf',
+    s3Uri: 's3://prashn-vault-east1/invoices/2024/10/invoice_oct_01.pdf',
     sha256: '4a6b29d9e847123984ab182e01a884d84c19203948571829034871928374aefb',
     pagesCount: 2,
     extractedFields: [
@@ -103,7 +103,7 @@ export const mockDocuments: DocumentItem[] = [
     processingDuration: '3.1s active',
     confidence: 94.2,
     extractedSummary: 'Extracting lines... (Target Store #489)',
-    s3Uri: 's3://docflow-vault-east1/receipts/2024/10/receipt_store_08.jpg',
+    s3Uri: 's3://prashn-vault-east1/receipts/2024/10/receipt_store_08.jpg',
     sha256: 'c984920485920394857102948571029348571029384750192834759102938475',
     pagesCount: 1,
     extractedFields: [
@@ -122,7 +122,7 @@ export const mockDocuments: DocumentItem[] = [
     processingDuration: '2.4s',
     confidence: 98.4,
     extractedSummary: '18 fields parsed · CloudTech Master Services',
-    s3Uri: 's3://docflow-vault-east1/contracts/2024/10/vendor_agreement_rev2.pdf',
+    s3Uri: 's3://prashn-vault-east1/contracts/2024/10/vendor_agreement_rev2.pdf',
     sha256: '7102938475910293847591029384759102938475910293847591029384759102',
     pagesCount: 8,
     extractedFields: [
@@ -145,7 +145,7 @@ export const mockDocuments: DocumentItem[] = [
     confidence: 62.1,
     extractedSummary: 'Unreadable resolution (< 72 DPI)',
     failureReason: 'DPI below minimum threshold (72 DPI detected, 150 DPI required). Unreadable characters routed to DLQ.',
-    s3Uri: 's3://docflow-vault-east1/forms/2024/10/application_form_claim.pdf',
+    s3Uri: 's3://prashn-vault-east1/forms/2024/10/application_form_claim.pdf',
     sha256: '1829384756102938475610293847561029384756102938475610293847561029',
     pagesCount: 1,
     extractedFields: []
@@ -161,7 +161,7 @@ export const mockDocuments: DocumentItem[] = [
     processingDuration: '1.6s',
     confidence: 99.1,
     extractedSummary: '$12,490.00 · Dell Enterprise Servers',
-    s3Uri: 's3://docflow-vault-east1/invoices/2024/10/purchase_order_8821.pdf',
+    s3Uri: 's3://prashn-vault-east1/invoices/2024/10/purchase_order_8821.pdf',
     sha256: '8475910293847591029384759102938475910293847591029384759102938475',
     pagesCount: 3,
     extractedFields: [
@@ -181,7 +181,7 @@ export const mockDocuments: DocumentItem[] = [
     processingDuration: '1.2s',
     confidence: 98.0,
     extractedSummary: '$240.50 · Whole Foods Market',
-    s3Uri: 's3://docflow-vault-east1/receipts/2024/10/receipt_supermarket.jpg',
+    s3Uri: 's3://prashn-vault-east1/receipts/2024/10/receipt_supermarket.jpg',
     sha256: '9384750192837495019283749501928374950192837495019283749501928374',
     pagesCount: 1,
     extractedFields: [
@@ -199,8 +199,8 @@ export const mockDocuments: DocumentItem[] = [
     fileSize: '5.1 MB',
     processingDuration: 'Queued',
     confidence: 0,
-    extractedSummary: 'Waiting in SQS docflow-standard-queue',
-    s3Uri: 's3://docflow-vault-east1/forms/2024/10/tax_statement_q3.pdf',
+    extractedSummary: 'Waiting in SQS prashn-standard-queue',
+    s3Uri: 's3://prashn-vault-east1/forms/2024/10/tax_statement_q3.pdf',
     sha256: '0192837465019283746501928374650192837465019283746501928374650192',
     pagesCount: 6,
     extractedFields: []

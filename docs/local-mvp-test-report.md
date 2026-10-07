@@ -4,7 +4,7 @@
 **Environment**: Local (Node.js, SQLite, Local Storage)
 
 ## Overview
-This report outlines the validation of the DocFlow Local MVP backend integration. The goal was to ensure the application genuinely functions without mock simulation, properly processes documents, classifies them, extracts structured data, and answers user questions grounded in the real document context.
+This report outlines the validation of the Prashn Local MVP backend integration. The goal was to ensure the application genuinely functions without mock simulation, properly processes documents, classifies them, extracts structured data, and answers user questions grounded in the real document context.
 
 ## Test Cases
 

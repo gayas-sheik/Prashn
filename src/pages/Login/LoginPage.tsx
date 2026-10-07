@@ -37,7 +37,7 @@ export const LoginPage: React.FC = () => {
           </div>
           <div className="flex items-center justify-center gap-1.5">
             <h1 className="text-[22px] font-bold text-[#0F172A] dark:text-[#F8FAFC]">
-              DocFlow
+              Prashn
             </h1>
             <span className="px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider rounded-[2px] bg-[#EFF6FF] text-[#1E40AF] dark:bg-[#1E3A8A40] dark:text-[#93C5FD]">
               Enterprise

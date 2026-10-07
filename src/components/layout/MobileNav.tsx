@@ -50,7 +50,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({ open, onClose }) => {
                 <Layers className="w-4 h-4" />
               </div>
               <span className="font-bold text-[16px] text-[#0F172A] dark:text-[#F8FAFC]">
-                DocFlow
+                Prashn
               </span>
             </div>
             <button

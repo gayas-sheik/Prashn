@@ -93,7 +93,7 @@ export const DashboardPage: React.FC = () => {
               const encodedUri = encodeURI(csvContent);
               const link = window.document.createElement("a");
               link.setAttribute("href", encodedUri);
-              link.setAttribute("download", "docflow_report_oct_2026.csv");
+              link.setAttribute("download", "prashn_report_oct_2026.csv");
               window.document.body.appendChild(link);
               link.click();
               window.document.body.removeChild(link);

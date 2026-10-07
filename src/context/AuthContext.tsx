@@ -28,7 +28,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(() => {
-    const stored = localStorage.getItem('docflow_auth_user');
+    const stored = localStorage.getItem('prashn_auth_user');
     if (stored) {
       try { return JSON.parse(stored); } catch { /* ignore */ }
     }
@@ -41,12 +41,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       email: email || defaultUser.email,
     };
     setUser(newUser);
-    localStorage.setItem('docflow_auth_user', JSON.stringify(newUser));
+    localStorage.setItem('prashn_auth_user', JSON.stringify(newUser));
   };
 
   const logout = () => {
     setUser(null);
-    localStorage.removeItem('docflow_auth_user');
+    localStorage.removeItem('prashn_auth_user');
   };
 
   return (

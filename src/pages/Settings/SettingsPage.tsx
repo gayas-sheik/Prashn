@@ -36,7 +36,7 @@ export const SettingsPage: React.FC = () => {
 
   // OCR Preferences
   const [autoDetect, setAutoDetect] = useState(true);
-  const [ocrEngine, setOcrEngine] = useState('AWS Textract + DocFlow LayoutLMv3');
+  const [ocrEngine, setOcrEngine] = useState('AWS Textract + Prashn LayoutLMv3');
   const [confidenceThreshold, setConfidenceThreshold] = useState(85);
   const [extractTotals, setExtractTotals] = useState(true);
   const [extractTaxes, setExtractTaxes] = useState(true);
@@ -380,9 +380,9 @@ export const SettingsPage: React.FC = () => {
                     onChange={(e) => setOcrEngine(e.target.value)}
                     className="w-full h-[36px] px-3 text-[13px] rounded-[4px] bg-white dark:bg-[#1E293B] border border-[#CBD5E1] dark:border-[#475569] text-[#0F172A] dark:text-[#F8FAFC]"
                   >
-                    <option value="AWS Textract + DocFlow LayoutLMv3">AWS Textract + DocFlow LayoutLMv3 (Recommended)</option>
+                    <option value="AWS Textract + Prashn LayoutLMv3">AWS Textract + Prashn LayoutLMv3 (Recommended)</option>
                     <option value="AWS Textract Tables Only">AWS Textract Standard (Fast Tables)</option>
-                    <option value="DocFlow High-Precision OCR">DocFlow High-Precision Local Ingest</option>
+                    <option value="Prashn High-Precision OCR">Prashn High-Precision Local Ingest</option>
                   </select>
                 </div>
 
@@ -573,7 +573,7 @@ export const SettingsPage: React.FC = () => {
                 <div className="p-3 bg-[#F8FAFC] dark:bg-[#162032] rounded-[4px] border border-[#E2E8F0] dark:border-[#2D3F5A] space-y-2">
                   <div className="flex justify-between items-center">
                     <span className="font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
-                      S3 Bucket: docflow-vault-east1
+                      S3 Bucket: prashn-vault-east1
                     </span>
                     <span className="font-mono text-[#1E40AF] dark:text-[#60A5FA]">
                       14.2 GB of 50.0 GB (28%)

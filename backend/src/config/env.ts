@@ -15,5 +15,5 @@ export const config = {
   classificationMode: process.env.CLASSIFICATION_MODE || 'local',
   uploadDir: process.env.UPLOAD_DIR || './storage/uploads',
   processedDir: process.env.PROCESSED_DIR || './storage/processed',
-  dbFile: process.env.DB_FILE || './data/development/docflow.db',
+  dbFile: process.env.DB_FILE || './data/development/prashn.db',
 };

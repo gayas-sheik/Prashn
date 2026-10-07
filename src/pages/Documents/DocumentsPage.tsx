@@ -97,7 +97,7 @@ export const DocumentsPage: React.FC = () => {
     const url = URL.createObjectURL(blob);
     const a = window.document.createElement('a');
     a.href = url;
-    a.download = `docflow_export_${Date.now()}.json`;
+    a.download = `prashn_export_${Date.now()}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };

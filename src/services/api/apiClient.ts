@@ -1,6 +1,6 @@
 const API_BASE_URL = 'http://localhost:5000/api';
 
-const TOKEN_KEY = 'docflow_auth_token';
+const TOKEN_KEY = 'prashn_auth_token';
 
 let token = localStorage.getItem(TOKEN_KEY);
 

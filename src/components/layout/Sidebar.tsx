@@ -48,7 +48,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggleCollapse })
               <div className="flex flex-col truncate">
                 <div className="flex items-center gap-1.5">
                   <span className="font-bold text-[15px] tracking-tight text-[#0F172A] dark:text-[#F8FAFC]">
-                    DocFlow
+                    Prashn
                   </span>
                   <span className="px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider rounded-[2px] bg-[#EFF6FF] text-[#1E40AF] dark:bg-[#1E3A8A40] dark:text-[#93C5FD]">
                     Cloud

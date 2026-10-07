@@ -11,7 +11,7 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [theme, setThemeState] = useState<ThemeMode>(() => {
-    const saved = localStorage.getItem('docflow_theme') as ThemeMode;
+    const saved = localStorage.getItem('prashn_theme') as ThemeMode;
     return saved || 'light';
   });
 
@@ -41,7 +41,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     };
 
     updateResolved();
-    localStorage.setItem('docflow_theme', theme);
+    localStorage.setItem('prashn_theme', theme);
 
     if (theme === 'system') {
       const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');

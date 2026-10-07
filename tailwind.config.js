@@ -8,7 +8,7 @@ export default {
   theme: {
     extend: {
       colors: {
-        docflow: {
+        prashn: {
           canvas: {
             light: '#F8FAFC',
             dark: '#0F172A',

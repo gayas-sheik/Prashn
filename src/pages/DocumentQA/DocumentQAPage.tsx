@@ -319,7 +319,7 @@ export const DocumentQAPage: React.FC = () => {
                     >
                       <div className="flex items-center gap-2 mb-1 px-1 text-[11px] text-[#64748B]">
                         <span className="font-medium">
-                          {isUser ? 'You (Alex Parker)' : 'DocFlow AI Assistant'}
+                          {isUser ? 'You (Alex Parker)' : 'Prashn AI Assistant'}
                         </span>
                         <span>·</span>
                         <span className="font-mono">{msg.timestamp}</span>
@@ -378,7 +378,7 @@ export const DocumentQAPage: React.FC = () => {
               {sending && (
                 <div className="flex flex-col items-start">
                   <div className="flex items-center gap-2 mb-1 px-1 text-[11px] text-[#64748B]">
-                    <span>DocFlow Assistant</span>
+                    <span>Prashn Assistant</span>
                     <span>·</span>
                     <span>Searching vectors...</span>
                   </div>
