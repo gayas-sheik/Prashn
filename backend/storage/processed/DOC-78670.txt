@@ -1,0 +1,8 @@
+INVOICE
+Invoice Number: INV-2023-002
+Date: 2026-10-09
+Vendor: ABC Services
+Total: $120.00
+
+-- 1 of 1 --
+

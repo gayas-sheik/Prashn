@@ -1,0 +1,548 @@
+Cloud-Native Event-Driven Document Processing
+Platform
+1. Introduction
+The proposed project is a Cloud-Native Event-Driven Document Processing Platform.
+The main purpose of the system is to allow users to upload documents such as invoices,
+receipts, application forms, IDs, or other semi-structured files and automatically process them in
+the cloud.
+Instead of making the user manually read the document and enter information, the platform can
+automatically:
+The main objective of the project is not simply document extraction. The document-processing
+use case is used to demonstrate important cloud-computing concepts such as event-driven
+architecture, asynchronous processing, serverless computing, message queues, scalability,
+fault handling, monitoring, security, Infrastructure as Code, CI/CD, and cost optimization.
+2. Simple Example
+Consider a company that receives several invoices every day.
+An invoice may contain:
+accept the uploaded document,
+store it securely,
+identify that a new document has arrived,
+send it for processing,
+extract useful information,
+store the extracted results,
+update the processing status,
+and display the final result to the user.
+invoice number,
+company name,
+invoice date,
+list of products,
+
+-- 1 of 18 --
+
+Normally, an employee may have to open the document, read these details, and enter them
+manually into another system.
+Using this platform, the employee simply uploads the invoice.
+For example:
+The user may finally see:
+3. What Makes the Platform Cloud-Native?
+A cloud-native system is not simply an application hosted on a cloud virtual machine.
+The application is designed from the beginning to make use of cloud capabilities.
+Instead of creating one large application that performs everything, the system can use separate
+managed cloud services for different responsibilities.
+tax,
+total amount.
+Invoice.pdf
+↓
+Uploaded to the system
+↓
+Stored securely
+↓
+Processing request created
+↓
+Text and fields extracted
+↓
+Information stored
+↓
+Result displayed
+Document: invoice.pdf
+Status: Completed
+Invoice Number: INV-1045
+Vendor: ABC Technologies
+Date: 06-10-2026
+Total Amount: ₹48,500
+
+-- 2 of 18 --
+
+For example:
+Depending on the cloud provider, these may be implemented using services such as:
+This architecture allows the platform to make better use of the scalability, reliability, automation,
+and pay-per-use features provided by the cloud.
+4. What Does "Event-Driven" Mean?
+The system reacts to events.
+An event simply represents something that has happened.
+For example:
+A new document has been uploaded.
+User
+↓
+Web Application
+↓
+Cloud Storage
+↓
+Event System
+↓
+Message Queue
+↓
+Processing Worker
+↓
+Document Extraction
+↓
+Database
+↓
+Dashboard
+Object storage
+Serverless functions
+Message queues
+Event buses
+Managed databases
+Monitoring services
+Authentication services
+
+-- 3 of 18 --
+
+This can be represented as:
+Other components can listen for this event and react to it.
+For example:
+The upload component does not need to directly call every other component.
+It only announces:
+"A document has been uploaded."
+The required components then react to that event.
+Similarly, when processing finishes, another event may be generated:
+That event may trigger:
+This results in loosely coupled components.
+5. Why Not Just Use a Normal Direct Flow?
+A basic application could work like this:
+DocumentUploaded
+DocumentUploaded
+|
+-------------------------
+| 	| 	|
+Processor 	Analytics Audit Logger
+DocumentProcessed
+updating the dashboard,
+notifying the user,
+recording analytics,
+creating an audit entry.
+Upload
+↓
+
+-- 4 of 18 --
+
+There is nothing technically wrong with this design.
+For a small system, it may even be simpler.
+However, as more functionality is added, every component becomes increasingly connected to
+the others.
+For example:
+The upload or processing service now needs to know about several other services.
+With an event-driven design:
+New functionality can be added without heavily modifying the existing upload service.
+This is one of the main advantages of event-driven systems.
+OCR
+↓
+Extract information
+↓
+Store result
+↓
+Notify user
+Upload
+↓
+Virus Scan
+↓
+OCR
+↓
+Classification
+↓
+Database
+↓
+Analytics
+↓
+Notification
+DocumentUploaded
+|
+-------------------------------------
+| 	| 	|
+OCR Service 	Virus Scanner 	Analytics
+
+-- 5 of 18 --
+
+6. What Does Asynchronous Processing Mean?
+Document processing can take time.
+For example, assume a document takes 20 seconds to process.
+In a synchronous system:
+The original request remains active until the entire operation completes.
+In an asynchronous system:
+The user does not need to keep waiting for the processing operation.
+In the background:
+Upload Document
+↓
+Wait
+↓
+Process document
+↓
+Wait
+↓
+Result returned
+Upload Document
+↓
+Store document
+↓
+Add processing request to queue
+↓
+"Document received – Processing"
+Queue
+↓
+Worker
+↓
+Document Processing
+↓
+Store result
+
+-- 6 of 18 --
+
+The dashboard may show:
+Therefore, asynchronous processing separates:
+accepting the work
+from
+finishing the work.
+7. Role of the Message Queue
+The queue is an important part of the architecture.
+Suppose 500 documents are uploaded within a very short period.
+Instead of attempting to process all 500 immediately:
+The queue temporarily stores the processing jobs.
+Workers take jobs from the queue at a manageable rate.
+For example:
+↓
+Status = Completed
+invoice1.pdf 	Completed
+invoice2.pdf 	Processing
+invoice3.pdf 	Failed
+500 Documents
+↓
+Queue
+↓
+Processing Workers
+Queue
+Doc 1
+Doc 2
+Doc 3
+...
+
+-- 7 of 18 --
+
+This prevents sudden traffic from overwhelming the processing system.
+The queue acts like a waiting area between the components producing work and the
+components performing the work.
+8. Scalability
+One of the main goals of the project is to demonstrate scalability.
+Consider two situations.
+Normal workload:
+Heavy workload:
+Cloud services can increase the amount of processing capacity when the workload grows.
+When workload decreases, the amount of compute being used can also decrease.
+This avoids the need to maintain a very large server continuously.
+9. Failure Handling
+Failures can occur during document processing.
+Doc 500
+↓
+Workers process documents
+10 documents
+↓
+Few processing workers
+10,000 documents
+↓
+Queue
+↓
+More concurrent workers
+
+-- 8 of 18 --
+
+For example:
+The system should not immediately lose the processing job.
+A queue-based architecture allows failed tasks to be attempted again.
+Example:
+If a document continues failing after multiple attempts, it can be placed in a Dead Letter
+Queue.
+This allows administrators to investigate failed documents separately without blocking the
+normal processing pipeline.
+10. Possible Architecture
+A possible AWS-style architecture may be:
+OCR service temporarily unavailable,
+processing function crashes,
+API limit reached,
+database temporarily unavailable.
+Document Processing
+↓
+Failure
+↓
+Message becomes available again
+↓
+Retry processing
+↓
+Success
+USER
+|
+v
+Web Application
+|
+v
+S3
+Document Storage
+|
+
+-- 9 of 18 --
+
+The exact cloud provider and services can be changed later.
+For example, similar services are available on GCP and Azure.
+The important part is the architectural pattern, not the specific provider.
+11. Possible Document Types
+The project may initially support one document type.
+For example:
+Later it can support:
+v
+EventBridge
+|
+v
+SQS
+Message Queue
+|
+v
+Lambda
+Processing Worker
+|
+v
+Textract
+Document Extraction
+|
+v
+DynamoDB
+Store Results
+|
+--------------------
+| 	|
+v 	v
+CloudWatch 	Dashboard
+Monitoring
+invoices.
+receipts,
+forms,
+IDs,
+
+-- 10 of 18 --
+
+An advanced version can identify the document type and route it to different processors.
+This introduces another useful cloud concept: content-based event routing.
+12. Advantages of the Project
+12.1 Automation
+Manual document entry can be reduced.
+The system can automatically extract useful information from uploaded files.
+12.2 Scalability
+The platform can handle changing workloads.
+A small number of documents can be processed normally, while a large burst of documents can
+be buffered using a queue and processed using additional cloud compute.
+12.3 Loose Coupling
+Different components do not need to know everything about each other.
+For example, the upload service only needs to announce that a document was uploaded.
+purchase orders,
+applications.
+Uploaded Document
+|
+v
+Classification
+|
+---------------------------
+| 	| 	|
+Invoice 	Receipt 	Form
+| 	| 	|
+v 	v 	v
+Processor 	Processor 	Processor
+
+-- 11 of 18 --
+
+Additional components such as analytics or auditing can later be added without heavily
+modifying the upload service.
+12.4 Better Handling of Traffic Bursts
+If hundreds or thousands of documents arrive suddenly, they can be temporarily stored in the
+queue.
+The system can process them safely rather than attempting to process everything immediately.
+12.5 Independent Scaling
+Different parts of the system can scale separately.
+For example:
+Each service can be scaled based on its own workload.
+12.6 Reliability
+Queues, retries, monitoring, and Dead Letter Queues can reduce the chance of processing
+tasks being lost during temporary failures.
+12.7 Better User Experience
+The user does not have to keep a long request open while document processing completes.
+They can upload the document, see a "Processing" status, and return later when the result is
+ready.
+12.8 Cost Efficiency
+OCR processing may require high compute capacity.
+Notifications may require very little capacity.
+Analytics may use another level of capacity.
+
+-- 12 of 18 --
+
+Serverless and managed cloud services allow the system to use resources primarily when
+processing is required.
+This can be cheaper than maintaining large servers continuously for student-scale workloads.
+12.9 Monitoring and Observability
+The system can monitor:
+This allows administrators to understand how the system behaves.
+12.10 Security
+Access can be controlled using cloud IAM policies.
+For example:
+Documents can also be encrypted while stored.
+13. Disadvantages and Challenges
+The architecture also has disadvantages.
+13.1 Increased Complexity
+A normal application could simply call one function after another.
+number of documents uploaded,
+documents processed successfully,
+failed documents,
+queue length,
+processing time,
+resource usage,
+errors.
+users may upload and view their own documents,
+processors may read documents but not modify unrelated resources,
+administrators may have broader permissions.
+
+-- 13 of 18 --
+
+The event-driven version introduces:
+Therefore, it is more complex to build.
+13.2 Harder Debugging
+In a normal application, the request follows a clear path.
+In an event-driven system, processing may pass through several independent components.
+Finding exactly where a failure occurred can be harder.
+This makes logging and tracing important.
+13.3 Eventual Consistency
+Results may not be available immediately.
+For example:
+and only later:
+The user must understand that the system does not always update everything instantly.
+13.4 Duplicate Processing
+queues,
+events,
+workers,
+retries,
+monitoring,
+permissions.
+Document uploaded
+Status: Processing
+Status: Completed
+
+-- 14 of 18 --
+
+In event-driven systems, the same event may occasionally be delivered or retried more than
+once.
+Therefore, the processing logic should be designed so that processing the same document
+twice does not create incorrect duplicate results.
+This concept is called idempotency.
+13.5 Cloud Vendor Dependency
+If the implementation depends heavily on services such as AWS Lambda, SQS, EventBridge,
+and DynamoDB, moving the application to another cloud provider may require changes.
+13.6 Cost Can Increase at Large Scale
+Serverless architectures can be very economical at low and moderate workloads.
+However, extremely large workloads can generate significant costs from:
+Therefore, cost monitoring is still necessary.
+14. What Is Unique About the Project?
+The uniqueness does not mainly come from document extraction itself.
+Document extraction systems already exist.
+The unique value of this academic project is in how the system is architected.
+Instead of presenting:
+"We built a system that reads documents."
+document extraction,
+function executions,
+storage,
+database requests,
+monitoring.
+
+-- 15 of 18 --
+
+the project demonstrates:
+"We designed a scalable, event-driven cloud architecture that can reliably accept, queue,
+process, store, monitor, and recover document-processing workloads."
+The main focus is therefore on:
+The document-processing workload acts as a practical use case through which these cloud
+concepts can be demonstrated.
+15. Why This Is Suitable as a Cloud Computing Project
+Many student projects involve building a normal application and simply hosting it on AWS or
+another cloud platform.
+For example:
+Although such a project uses the cloud, it does not necessarily demonstrate much
+understanding of cloud architecture.
+This project is different because the architecture itself is based around cloud concepts.
+event-driven architecture,
+asynchronous processing,
+loose coupling,
+message queues,
+independent scaling,
+retry mechanisms,
+monitoring,
+serverless infrastructure,
+Infrastructure as Code,
+CI/CD,
+security,
+cost optimization.
+Web Application
+↓
+Cloud VM
+↓
+Database
+
+-- 16 of 18 --
+
+The system is designed to explore:
+Therefore, the cloud is not simply the place where the application is hosted.
+The cloud architecture is a major part of the project itself.
+16. Possible Learning Outcomes
+By completing the project, the team should understand:
+17. Final Summary
+serverless computing,
+managed storage,
+event-driven systems,
+asynchronous processing,
+distributed components,
+monitoring,
+infrastructure automation,
+cloud security,
+scalability,
+reliability,
+cost efficiency.
+ . How cloud object storage works.
+2. How event-driven architecture works.
+3. How message queues help decouple services.
+4. How asynchronous processing works.
+5. How cloud systems handle traffic bursts.
+6. How serverless compute scales.
+7. How failures and retries are handled.
+8. How IAM permissions protect resources.
+9. How monitoring and logging are implemented.
+ 0. How infrastructure can be created using Terraform.
+  . How CI/CD can automate deployment.
+ 2. How cloud costs can be monitored and optimized.
+
+-- 17 of 18 --
+
+The Cloud-Native Event-Driven Document Processing Platform is a system where users
+upload documents and the cloud automatically stores, queues, processes, and extracts useful
+information from them.
+The project uses an event-driven and asynchronous architecture so that different components
+can work independently.
+Instead of forcing every step to execute as one tightly connected process, events and queues
+connect the different services.
+This allows the platform to:
+The main contribution of the project is therefore not simply document processing.
+It is the design and implementation of a scalable, reliable, secure, observable, and cost-
+aware cloud architecture for document-processing workloads.
+handle sudden increases in workload,
+process many documents concurrently,
+scale processing resources when required,
+retry failed tasks,
+isolate failures,
+add new services more easily,
+monitor system performance,
+and reduce unnecessary infrastructure usage.
+
+-- 18 of 18 --
+

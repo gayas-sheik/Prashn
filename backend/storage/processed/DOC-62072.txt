@@ -1,0 +1,1 @@
+Extracted mock text for application/octet-stream. No actual OCR ran because this is a local MVP without an OCR engine. Invoice Number: INV-999. Total: $500.00. Vendor: ImageCorp.
