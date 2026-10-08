@@ -16,6 +16,7 @@ import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import type { StagedUploadFile, DocumentType } from '../../types';
 import { uploadDocuments } from '../../services/api/documentService';
+import { getUploadValidationError } from '../../services/uploadValidation';
 
 export const UploadPage: React.FC = () => {
   const navigate = useNavigate();
@@ -26,40 +27,9 @@ export const UploadPage: React.FC = () => {
   const [uploading, setUploading] = useState(false);
   const [overallProgress, setOverallProgress] = useState(0);
   const [uploadSuccess, setUploadSuccess] = useState(false);
+  const [uploadMessage, setUploadMessage] = useState('');
 
-  // Initial staged realistic files matching Stitch prompt
-  const [stagedFiles, setStagedFiles] = useState<StagedUploadFile[]>([
-    {
-      id: 'stg-1',
-      name: 'invoice_oct_01.pdf',
-      size: 2516582,
-      formattedSize: '2.4 MB',
-      mimeType: 'application/pdf',
-      detectedType: 'Invoice',
-      status: 'Ready',
-      progress: 0,
-    },
-    {
-      id: 'stg-2',
-      name: 'receipt_store_014.jpg',
-      size: 1258291,
-      formattedSize: '1.2 MB',
-      mimeType: 'image/jpeg',
-      detectedType: 'Receipt',
-      status: 'Ready',
-      progress: 0,
-    },
-    {
-      id: 'stg-3',
-      name: 'application_form_102.pdf',
-      size: 860160,
-      formattedSize: '840 KB',
-      mimeType: 'application/pdf',
-      detectedType: 'Form',
-      status: 'Ready',
-      progress: 0,
-    },
-  ]);
+  const [stagedFiles, setStagedFiles] = useState<StagedUploadFile[]>([]);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -89,7 +59,7 @@ export const UploadPage: React.FC = () => {
     if (lower.includes('invoice') || lower.includes('bill') || lower.includes('inv')) return 'Invoice';
     if (lower.includes('receipt') || lower.includes('store') || lower.includes('target') || lower.includes('mart')) return 'Receipt';
     if (lower.includes('form') || lower.includes('claim') || lower.includes('tax') || lower.includes('app')) return 'Form';
-    return 'Invoice';
+    return 'Unknown';
   };
 
   const formatFileSize = (bytes: number) => {
@@ -98,6 +68,7 @@ export const UploadPage: React.FC = () => {
   };
 
   const addFiles = (files: File[]) => {
+    if (uploading) return;
     const newItems: StagedUploadFile[] = files.map((file, idx) => ({
       id: `stg-${Date.now()}-${idx}`,
       file,
@@ -106,7 +77,8 @@ export const UploadPage: React.FC = () => {
       formattedSize: formatFileSize(file.size),
       mimeType: file.type || 'application/octet-stream',
       detectedType: detectTypeFromFileName(file.name),
-      status: 'Ready',
+      status: getUploadValidationError(file) ? 'Failed' : 'Ready',
+      error: getUploadValidationError(file) || undefined,
       progress: 0,
     }));
 
@@ -116,6 +88,7 @@ export const UploadPage: React.FC = () => {
       setStagedFiles((prev) => [...prev, ...newItems]);
     }
     setUploadSuccess(false);
+    setUploadMessage('');
   };
 
   const removeFile = (id: string) => {
@@ -128,37 +101,44 @@ export const UploadPage: React.FC = () => {
   };
 
   const startUpload = async () => {
-    if (stagedFiles.length === 0) return;
+    const eligible = stagedFiles.filter(file => file.file && !['Uploaded', 'Completed'].includes(file.status) && !getUploadValidationError(file.file));
+    if (!eligible.length) return;
     setUploading(true);
-    setOverallProgress(10);
+    setUploadMessage('');
+    setOverallProgress(0);
+    let finished = 0;
 
-    const uploadedDocs = await uploadDocuments(stagedFiles, (fileId, progress, status) => {
+    const uploadedDocs = await uploadDocuments(eligible, (fileId, progress, status, error) => {
       setStagedFiles((prev) =>
-        prev.map((f) => (f.id === fileId ? { ...f, progress, status, speed: '2.1 MB/s' } : f))
+        prev.map((f) => (f.id === fileId ? { ...f, progress, status, error } : f))
       );
-      setOverallProgress((prev) => Math.min(95, prev + 25));
+      if (status === 'Uploaded' || status === 'Failed') {
+        finished++;
+        setOverallProgress(Math.round(finished / eligible.length * 100));
+      }
     });
 
     setOverallProgress(100);
     setUploading(false);
     
-    if (uploadedDocs.length > 0) {
+    if (uploadedDocs.length === eligible.length) {
       setUploadSuccess(true);
     } else {
       setUploadSuccess(false);
-      alert('Upload failed. Please check your connection and try again.');
+      setUploadMessage(`${uploadedDocs.length} of ${eligible.length} files uploaded. Retry the failed files using Upload / Retry Files.`);
     }
   };
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
+      {uploadMessage && <p role="status" className="text-sm text-red-600">{uploadMessage}</p>}
       {/* Header */}
       <div className="pb-2 border-b border-[#E2E8F0] dark:border-[#334155]">
         <h1 className="text-[24px] font-bold tracking-tight text-[#0F172A] dark:text-[#F8FAFC]">
           Upload Documents
         </h1>
         <p className="text-[13px] text-[#64748B] dark:text-[#94A3B8] mt-0.5">
-          Upload one or multiple documents for automated cloud OCR, classification, and metadata extraction.
+          Upload one or multiple documents for automated local OCR, classification, and metadata extraction.
         </p>
       </div>
 
@@ -170,7 +150,7 @@ export const UploadPage: React.FC = () => {
             Automatic Classification Enabled:
           </span>{' '}
           <span className="text-[#334155] dark:text-[#CBD5E1]">
-            You do not need to specify document types manually. Prashn's AWS Textract pipeline will automatically detect invoices, receipts, and structured forms upon ingestion.
+            You do not need to specify document types manually. Prashn's local processing pipeline will automatically detect invoices, receipts, and structured forms upon ingestion.
           </span>
         </div>
       </div>
@@ -238,7 +218,7 @@ export const UploadPage: React.FC = () => {
         </p>
         <div className="flex items-center justify-center gap-1.5 text-[11px] text-[#059669] mt-3">
           <ShieldCheck className="w-4 h-4" />
-          <span>Files are encrypted in transit and stored in SOC2-compliant AWS S3 bucket.</span>
+          <span>Original documents are stored locally and accessible only through your account.</span>
         </div>
       </div>
 
@@ -265,21 +245,22 @@ export const UploadPage: React.FC = () => {
                   icon={<UploadCloud className="w-3.5 h-3.5" />}
                   onClick={startUpload}
                   loading={uploading}
+                  disabled={!stagedFiles.some(file => file.file && !['Uploaded', 'Completed'].includes(file.status) && !getUploadValidationError(file.file))}
                 >
-                  Upload All ({stagedFiles.length})
+                  Upload / Retry Files
                 </Button>
               </div>
             </div>
           }
           noPadding
         >
-          {/* Active In-Flight Upload Simulation Progress Bar */}
+          {/* Upload request progress */}
           {uploading && (
             <div className="p-4 bg-[#F8FAFC] dark:bg-[#162032] border-b border-[#E2E8F0] dark:border-[#334155]">
               <div className="flex items-center justify-between text-[12px] mb-1.5">
                 <span className="font-medium text-[#1E40AF] dark:text-[#60A5FA] flex items-center gap-1.5">
                   <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                  Uploading & sending to AWS SQS queue...
+                  Uploading documents for background processing...
                 </span>
                 <span className="font-mono text-[#0F172A] dark:text-[#F8FAFC] font-semibold tabular-nums">
                   {overallProgress}%
@@ -314,9 +295,7 @@ export const UploadPage: React.FC = () => {
                       <div className="flex items-center gap-2 text-[11px] text-[#64748B] dark:text-[#94A3B8] font-mono">
                         <span>{file.formattedSize}</span>
                         <span>·</span>
-                        <span className="px-1.5 py-0.2 rounded-[2px] bg-[#F1F5F9] dark:bg-[#334155] text-[#334155] dark:text-[#CBD5E1]">
-                          Auto-classify: {file.detectedType}
-                        </span>
+                        <span>Type detected after processing</span>
                       </div>
                     </div>
                   </div>
@@ -332,15 +311,16 @@ export const UploadPage: React.FC = () => {
                     {file.status === 'Uploading' && (
                       <span className="text-[11px] font-mono text-[#0284C7] flex items-center gap-1">
                         <RefreshCw className="w-3 h-3 animate-spin" />
-                        Uploading ({file.progress}%)
+                        Uploading...
                       </span>
                     )}
 
-                    {file.status === 'Completed' && (
+                    {['Uploaded', 'Completed'].includes(file.status) && (
                       <Badge variant="success" icon={<CheckCircle2 className="w-3 h-3" />}>
-                        100% Ingested
+                        Uploaded · Processing queued
                       </Badge>
                     )}
+                    {file.status === 'Failed' && <span role="alert" className="max-w-[180px] text-[11px] text-red-600">{file.error || 'Upload failed. Remove and add the file to retry.'}</span>}
 
                     {!uploading && (
                       <button
@@ -370,7 +350,7 @@ export const UploadPage: React.FC = () => {
                   {stagedFiles.length} documents queued successfully!
                 </h4>
                 <p className="text-[12px] text-[#065F46] dark:text-[#A7F3D0] mt-0.5">
-                  Live extraction status and AWS pipeline stages are visible in Processing view.
+                  Live extraction status and processing stages are visible in Processing view.
                 </p>
               </div>
             </div>

@@ -24,16 +24,18 @@ export const DashboardPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTypeFilter, setSelectedTypeFilter] = useState<'All' | 'Invoice' | 'Receipt' | 'Form'>('All');
   const [previewDoc, setPreviewDoc] = useState<DocumentItem | null>(null);
+  const [error, setError] = useState('');
 
   const loadDocs = async () => {
-    setLoading(true);
-    const data = await getDocuments();
-    setDocuments(data);
-    setLoading(false);
+    try { const data = await getDocuments(); setDocuments(data); setError(''); }
+    catch (err) { setError(err instanceof Error ? err.message : 'Unable to load documents'); }
+    finally { setLoading(false); }
   };
 
   useEffect(() => {
     loadDocs();
+    const timer = setInterval(loadDocs, 3000);
+    return () => clearInterval(timer);
   }, []);
 
   const handleDelete = async (id: string) => {
@@ -75,6 +77,7 @@ export const DashboardPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-[#E2E8F0] dark:border-[#334155]">
         <div>
@@ -82,7 +85,7 @@ export const DashboardPage: React.FC = () => {
             Dashboard
           </h1>
           <p className="text-[13px] text-[#64748B] dark:text-[#94A3B8] mt-0.5">
-            Overview of your document processing activity across AWS cloud pipelines.
+            Overview of your document processing activity across the local processing pipeline.
           </p>
         </div>
 

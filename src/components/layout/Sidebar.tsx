@@ -55,7 +55,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggleCollapse })
                   </span>
                 </div>
                 <span className="text-[10px] text-[#64748B] dark:text-[#94A3B8] font-mono">
-                  AWS Enterprise
+                  Local Workspace
                 </span>
               </div>
             )}

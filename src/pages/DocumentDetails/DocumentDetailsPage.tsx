@@ -7,7 +7,6 @@ import {
   Trash2, 
   ZoomIn, 
   ZoomOut, 
-  Layers, 
   CheckCircle2, 
   MessageSquare, 
   Code, 
@@ -21,7 +20,8 @@ import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import type { DocumentItem } from '../../types';
-import { getDocument, retryDocument, deleteDocument } from '../../services/api/documentService';
+import { getDocument, retryDocument, deleteDocument, getOriginalBlob } from '../../services/api/documentService';
+import { OriginalDocumentPreview } from '../../components/documents/OriginalDocumentPreview';
 
 export const DocumentDetailsPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -29,22 +29,24 @@ export const DocumentDetailsPage: React.FC = () => {
 
   const [docItem, setDocItem] = useState<DocumentItem | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'extracted' | 'qa' | 'rawJson'>('extracted');
-  const [showBoundingBoxes, setShowBoundingBoxes] = useState(true);
+  const [activeTab, setActiveTab] = useState<'extracted' | 'qa' | 'rawJson' | 'text'>('extracted');
+  const [error, setError] = useState('');
   const [zoomLevel, setZoomLevel] = useState(100);
   const [currentPage, setCurrentPage] = useState(1);
   const [copiedJson, setCopiedJson] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
     const fetchDoc = async () => {
-      setLoading(true);
-      if (id) {
-        const doc = await getDocument(id);
-        setDocItem(doc);
-      }
-      setLoading(false);
+      try {
+        if (id) { const doc = await getDocument(id); if (!cancelled) setDocItem(doc); }
+      } catch (err) { if (!cancelled) setError(err instanceof Error ? err.message : 'Unable to load document'); }
+      finally { if (!cancelled) setLoading(false); }
     };
-    fetchDoc();
+    setLoading(true); setError(''); setCurrentPage(1);
+    void fetchDoc();
+    const timer = setInterval(fetchDoc, 2500);
+    return () => { cancelled = true; clearInterval(timer); };
   }, [id]);
 
   const handleCopyJson = () => {
@@ -55,27 +57,29 @@ export const DocumentDetailsPage: React.FC = () => {
     }
   };
 
-  const handleDownloadOriginal = () => {
+  const handleDownloadOriginal = async () => {
     if (!docItem) return;
-    const blob = new Blob([`Simulated document content for ${docItem.name}`], { type: 'application/pdf' });
+    try {
+    const blob = await getOriginalBlob(docItem.id);
     const url = URL.createObjectURL(blob);
     const a = window.document.createElement('a');
     a.href = url;
     a.download = docItem.name;
     a.click();
     URL.revokeObjectURL(url);
+    } catch (err) { setError(err instanceof Error ? err.message : 'Download failed'); }
   };
 
   const handleReprocess = async () => {
     if (!docItem) return;
-    const updated = await retryDocument(docItem.id);
-    if (updated) setDocItem(updated);
+    try { const updated = await retryDocument(docItem.id); if (updated) setDocItem(updated); }
+    catch (err) { setError(err instanceof Error ? err.message : 'Reprocessing failed'); }
   };
 
   const handleDelete = async () => {
     if (!docItem) return;
-    await deleteDocument(docItem.id);
-    navigate('/documents');
+    try { await deleteDocument(docItem.id); navigate('/documents'); }
+    catch (err) { setError(err instanceof Error ? err.message : 'Deletion failed'); }
   };
 
   if (loading) {
@@ -92,7 +96,7 @@ export const DocumentDetailsPage: React.FC = () => {
       <div className="py-24 text-center">
         <h2 className="text-[18px] font-bold text-[#0F172A] dark:text-[#F8FAFC]">Document Not Found</h2>
         <p className="text-[13px] text-[#64748B] dark:text-[#94A3B8] mt-1">
-          The requested document could not be located in S3 vault.
+          {error || 'The requested document could not be found.'}
         </p>
         <Button variant="secondary" className="mt-4" onClick={() => navigate('/documents')}>
           Back to Documents
@@ -103,6 +107,7 @@ export const DocumentDetailsPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {(error || docItem.failureReason) && <p role="alert" className="p-3 text-sm text-red-600 border border-red-200 rounded">{error || docItem.failureReason}</p>}
       {/* Top Header & Breadcrumbs */}
       <div className="space-y-3 pb-3 border-b border-[#E2E8F0] dark:border-[#334155]">
         {/* Breadcrumb row */}
@@ -131,7 +136,7 @@ export const DocumentDetailsPage: React.FC = () => {
               </span>
             </div>
             <div className="flex flex-wrap items-center gap-3 text-[12px] text-[#64748B] dark:text-[#94A3B8] font-mono">
-              <span>OCR Engine: AWS Textract + LayoutLMv3</span>
+              <span>Extraction: {docItem.pages?.some(page => page.extractionMethod === 'ocr') ? 'Local OCR + PDF text' : 'PDF text'}</span>
               <span>·</span>
               <span className="text-[#059669] dark:text-[#34D399] font-semibold">
                 Confidence: {docItem.confidence}%
@@ -151,7 +156,7 @@ export const DocumentDetailsPage: React.FC = () => {
               icon={<Download className="w-3.5 h-3.5" />}
               onClick={handleDownloadOriginal}
             >
-              Download Original (PDF)
+              Download Original
             </Button>
             <Button
               size="sm"
@@ -166,6 +171,7 @@ export const DocumentDetailsPage: React.FC = () => {
               variant="secondary"
               icon={<RotateCw className="w-3.5 h-3.5" />}
               onClick={handleReprocess}
+              disabled={!['Failed', 'Completed'].includes(docItem.status)}
             >
               Reprocess
             </Button>
@@ -236,24 +242,12 @@ export const DocumentDetailsPage: React.FC = () => {
                 </button>
               </div>
 
-              {/* Bounding Box Toggle */}
-              <button
-                onClick={() => setShowBoundingBoxes(!showBoundingBoxes)}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-[4px] text-[11px] font-medium border transition-colors ${
-                  showBoundingBoxes
-                    ? 'bg-[#EFF6FF] border-[#BFDBFE] text-[#1E40AF] dark:bg-[#1E3A8A40] dark:border-[#1E40AF] dark:text-[#93C5FD]'
-                    : 'bg-white border-[#CBD5E1] text-[#64748B] dark:bg-[#1E293B] dark:border-[#475569]'
-                }`}
-              >
-                <Layers className="w-3 h-3" />
-                <span>OCR Bounding Boxes: {showBoundingBoxes ? 'ON' : 'OFF'}</span>
-              </button>
+              <span className="text-[11px] text-[#64748B]">Original uploaded file</span>
             </div>
 
             {/* Document Canvas Preview */}
             <div className="p-6 bg-[#64748B10] flex items-center justify-center min-h-[580px] overflow-auto">
               <div
-                style={{ transform: `scale(${zoomLevel / 100})`, transformOrigin: 'top center' }}
                 className="w-[595px] min-h-[742px] bg-white text-[#0F172A] shadow-layer2 border border-[#CBD5E1] p-8 relative rounded-[2px] transition-transform select-none"
               >
                 {/* Actual Document Content Preview */}
@@ -261,23 +255,7 @@ export const DocumentDetailsPage: React.FC = () => {
                   <div className="absolute top-2 right-2 text-xs text-gray-500 z-10 px-2 py-1 bg-white/80 rounded">
                     {docItem.originalFileName || docItem.name}
                   </div>
-                  {docItem.mimeType?.startsWith('image/') ? (
-                    <img 
-                      src={`http://localhost:5000/api/documents/${docItem.id}/file?token=${localStorage.getItem('token')}`} 
-                      alt={docItem.name} 
-                      className="max-w-full max-h-full object-contain" 
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).style.display = 'none';
-                        (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
-                      }}
-                    />
-                  ) : (
-                    <embed 
-                      src={`http://localhost:5000/api/documents/${docItem.id}/file?token=${localStorage.getItem('token')}`} 
-                      type={docItem.mimeType} 
-                      className="w-full h-full" 
-                    />
-                  )}
+                  <OriginalDocumentPreview id={docItem.id} name={docItem.name} mimeType={docItem.mimeType} page={currentPage} zoom={zoomLevel} />
                   {/* Fallback if image fails to load */}
                   <div className="hidden text-center text-gray-400 py-10 w-full">
                      Preview unavailable.<br/>Please download the original file.
@@ -289,7 +267,7 @@ export const DocumentDetailsPage: React.FC = () => {
 
           {/* Document Storage & Checksum Metadata Card */}
           <Card
-            title="S3 Cloud Vault & Cryptographic Integrity"
+            title="Document Storage & Integrity"
             subtitle="Verified storage proof & immutable trace"
           >
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[12px] font-mono">
@@ -300,7 +278,7 @@ export const DocumentDetailsPage: React.FC = () => {
                 </span>
               </div>
               <div className="p-2.5 rounded-[4px] bg-[#F8FAFC] dark:bg-[#162032] border border-[#E2E8F0] dark:border-[#2D3F5A]">
-                <span className="text-[11px] text-[#64748B] block mb-1">AWS S3 Destination:</span>
+                <span className="text-[11px] text-[#64748B] block mb-1">Storage location:</span>
                 <span className="text-[11px] text-[#1E40AF] dark:text-[#60A5FA] break-all select-all">
                   {docItem.s3Uri}
                 </span>
@@ -334,6 +312,9 @@ export const DocumentDetailsPage: React.FC = () => {
               >
                 Grounded Q&A
               </button>
+              <button onClick={() => setActiveTab('text')} className={`flex-1 py-3 text-[12px] font-medium border-b-2 ${activeTab === 'text' ? 'border-[#1E40AF] text-[#1E40AF]' : 'border-transparent text-[#64748B]'}`}>
+                Full Text
+              </button>
               <button
                 onClick={() => setActiveTab('rawJson')}
                 className={`flex-1 py-3 text-[12px] font-medium border-b-2 transition-all ${
@@ -347,6 +328,12 @@ export const DocumentDetailsPage: React.FC = () => {
             </div>
 
             <div className="p-4">
+              {activeTab === 'text' && <div className="space-y-4 max-h-[650px] overflow-auto">
+                {docItem.pages?.length ? docItem.pages.map(page => <section key={page.page}>
+                  <h4 className="font-semibold text-sm mb-2">Page {page.page} · {page.extractionMethod === 'ocr' ? 'OCR' : 'PDF text'}</h4>
+                  <pre className="whitespace-pre-wrap break-words text-xs font-mono">{page.text || '(Blank page)'}</pre>
+                </section>) : <p className="text-sm text-[#64748B]">Reprocess this document to inspect its complete page text.</p>}
+              </div>}
               {/* TAB 1: Extracted Fields & Line Items */}
               {activeTab === 'extracted' && (
                 <div className="space-y-4">
@@ -354,7 +341,7 @@ export const DocumentDetailsPage: React.FC = () => {
                   <div className="p-3 rounded-[4px] bg-[#ECFDF5] dark:bg-[#064E3B20] border border-[#A7F3D0] dark:border-[#065F46] flex items-center gap-2.5">
                     <CheckCircle2 className="w-4 h-4 text-[#059669] flex-shrink-0" />
                     <span className="text-[12px] text-[#065F46] dark:text-[#34D399] font-medium">
-                      All 5 line items reconciled against subtotal. Mathematical integrity verified (100% confidence).
+                      {docItem.extractedFields.length} extracted fields and {docItem.lineItems?.length || 0} line items. Review against the original document.
                     </span>
                   </div>
 
@@ -378,7 +365,7 @@ export const DocumentDetailsPage: React.FC = () => {
                             </span>
                             {field.confidence && (
                               <span className="text-[10px] font-mono text-[#059669]">
-                                {field.confidence}%
+                                {Math.round(field.confidence * 100)}%
                               </span>
                             )}
                           </div>

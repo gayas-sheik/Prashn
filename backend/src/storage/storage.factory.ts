@@ -12,9 +12,7 @@ export function getStorageProvider(): StorageProvider {
   if (config.storageMode === 'local') {
     storageInstance = new LocalStorageProvider();
   } else {
-    // In future, implement S3StorageProvider
-    console.warn('Non-local storage requested but not implemented. Falling back to LocalStorage.');
-    storageInstance = new LocalStorageProvider();
+    throw new Error(`Storage mode ${config.storageMode} is not implemented. Use STORAGE_MODE=local until the AWS adapter is added.`);
   }
 
   return storageInstance;

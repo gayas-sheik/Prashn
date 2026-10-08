@@ -1,6 +1,5 @@
 import multer from 'multer';
 import path from 'path';
-import fs from 'fs';
 import os from 'os';
 
 // Use OS temp directory for initial upload before moving it via StorageProvider
@@ -19,6 +18,12 @@ const storage = multer.diskStorage({
 export const upload = multer({
   storage,
   limits: {
-    fileSize: 50 * 1024 * 1024, // 50MB limit
-  }
+    fileSize: 10 * 1024 * 1024,
+    files: 20,
+    fields: 10,
+  },
+  fileFilter: (req, file, cb) => {
+    if (!['application/pdf', 'image/png', 'image/jpeg'].includes(file.mimetype)) return cb(Object.assign(new Error('Supported formats: PDF, PNG and JPEG'), { status: 415 }));
+    cb(null, true);
+  },
 });

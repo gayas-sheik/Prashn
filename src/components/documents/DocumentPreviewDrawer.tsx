@@ -127,7 +127,7 @@ export const DocumentPreviewDrawer: React.FC<DocumentPreviewDrawerProps> = ({
                     <span className="font-mono text-[11px]">{document.uploadDate}</span>
                   </div>
                   <div className="pt-1.5 border-t border-[#E2E8F0] dark:border-[#2D3F5A]">
-                    <span className="text-[10px] text-[#64748B] block mb-0.5">S3 URI:</span>
+                    <span className="text-[10px] text-[#64748B] block mb-0.5">Storage location:</span>
                     <span className="font-mono text-[10px] text-[#1E40AF] dark:text-[#60A5FA] break-all select-all">
                       {document.s3Uri}
                     </span>

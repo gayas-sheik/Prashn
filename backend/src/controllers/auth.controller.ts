@@ -10,10 +10,11 @@ const userRepo = new UserRepository();
 
 export const register = async (req: Request, res: Response) => {
   try {
-    const { email, password, fullName } = req.body;
+    const { password, fullName } = req.body || {};
+    const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
     
-    if (!email || !password || !fullName) {
-      return res.status(400).json({ error: 'Missing required fields' });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || typeof password !== 'string' || password.length < 8 || Buffer.byteLength(password) > 72 || typeof fullName !== 'string' || !fullName.trim() || fullName.length > 100) {
+      return res.status(400).json({ error: 'Enter a valid email, full name, and password (8 to 72 bytes)' });
     }
 
     const existingUser = await userRepo.findByEmail(email);
@@ -28,7 +29,7 @@ export const register = async (req: Request, res: Response) => {
       id: uuidv4(),
       email,
       passwordHash,
-      fullName,
+      fullName: fullName.trim(),
       role: 'user',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -45,9 +46,10 @@ export const register = async (req: Request, res: Response) => {
 
 export const login = async (req: Request, res: Response) => {
   try {
-    const { email, password } = req.body;
+    const { password } = req.body || {};
+    const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
 
-    if (!email || !password) {
+    if (!email || typeof password !== 'string' || !password || Buffer.byteLength(password) > 72) {
       return res.status(400).json({ error: 'Missing credentials' });
     }
 

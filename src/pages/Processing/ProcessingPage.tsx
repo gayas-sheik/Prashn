@@ -46,10 +46,10 @@ export const ProcessingPage: React.FC = () => {
 
   const pipelineStages = [
     'Uploaded',
-    'Queued in SQS',
+    'Queued',
     'Worker Processing',
-    'Classifying (LayoutLMv3)',
-    'Extracting Information (Textract)',
+    'Classifying',
+    'Extracting Information',
     'Indexed & Ready'
   ];
 
@@ -75,7 +75,7 @@ export const ProcessingPage: React.FC = () => {
             Processing Pipeline & Queue
           </h1>
           <p className="text-[13px] text-[#64748B] dark:text-[#94A3B8] mt-0.5">
-            Real-time telemetry and stage-by-stage execution across AWS Textract, SQS, and Lambda workers.
+            Live document status across the local extraction and classification pipeline.
           </p>
         </div>
 
@@ -192,7 +192,7 @@ export const ProcessingPage: React.FC = () => {
                       )}
                       {doc.status === 'Queued' && (
                         <Badge variant="warning" icon={<Clock className="w-3 h-3" />}>
-                          Queued in SQS
+                          Queued
                         </Badge>
                       )}
                       {isFailed && (

@@ -1,5 +1,5 @@
 import type { DocumentItem, QAMessage, StagedUploadFile, ActivityEvent } from '../../types';
-import { apiClient, getAuthToken } from './apiClient';
+import { apiClient, apiResponse, ApiError } from './apiClient';
 
 // Map backend Document shape to frontend DocumentItem shape
 function mapDocument(d: any): DocumentItem {
@@ -38,7 +38,8 @@ export async function getDocument(id: string): Promise<DocumentItem | null> {
     const data = await apiClient(`/documents/${id}`);
     return mapDocument(data.document);
   } catch (error) {
-    return null;
+    if (error instanceof ApiError && error.status === 404) return null;
+    throw error;
   }
 }
 
@@ -53,50 +54,31 @@ export async function deleteDocument(id: string): Promise<boolean> {
 }
 
 export async function retryDocument(id: string): Promise<DocumentItem | null> {
-  try {
     await apiClient(`/documents/${id}/retry`, { method: 'POST' });
     return await getDocument(id);
-  } catch (error) {
-    return null;
-  }
 }
 
 export async function uploadDocuments(
   stagedFiles: StagedUploadFile[],
-  onProgress?: (fileId: string, progress: number, status: StagedUploadFile['status']) => void
+  onProgress?: (fileId: string, progress: number, status: StagedUploadFile['status'], error?: string) => void
 ): Promise<DocumentItem[]> {
   const newCreatedDocs: DocumentItem[] = [];
 
   for (const f of stagedFiles) {
-    if (!f.file) continue;
+    if (!f.file || ['Uploaded', 'Completed'].includes(f.status)) continue;
     
-    onProgress?.(f.id, 25, 'Uploading');
+    onProgress?.(f.id, 0, 'Uploading');
     
     const formData = new FormData();
     formData.append('file', f.file);
 
     try {
-      const token = await getAuthToken();
-      // Using raw XHR or fetch doesn't give fine-grained progress easily without custom hook,
-      // We will simulate the progress events for UX, then await fetch.
-      onProgress?.(f.id, 65, 'Uploading');
-      
-      const response = await fetch('http://localhost:5000/api/documents/upload', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
-        body: formData
-      });
-      
-      if (!response.ok) throw new Error('Upload failed');
-      const data = await response.json();
-      
-      onProgress?.(f.id, 100, 'Completed');
-      newCreatedDocs.push(data.document);
+      const data = await apiClient('/documents/upload', { method: 'POST', body: formData });
+      onProgress?.(f.id, 100, 'Uploaded');
+      newCreatedDocs.push(mapDocument(data.document));
     } catch (error) {
       console.error('Upload failed for', f.name, error);
-      onProgress?.(f.id, 0, 'Failed');
+      onProgress?.(f.id, 0, 'Failed', error instanceof Error ? error.message : 'Upload failed');
     }
   }
 
@@ -117,49 +99,19 @@ export async function askQuestion(documentId: string, question: string): Promise
 }
 
 export async function getSuggestedPrompts(documentId: string): Promise<string[]> {
-  try {
-    const doc = await getDocument(documentId);
-    const type = doc?.type || 'Unknown';
-    if (type === 'Invoice') {
-      return [
-        "What is the total amount?",
-        "Who is the vendor?",
-        "What is the invoice number?",
-        "What is the due date?",
-        "Summarize this invoice",
-      ];
-    } else if (type === 'Receipt') {
-      return [
-        "What is the total amount?",
-        "What store is this from?",
-        "What is the payment method?",
-        "Summarize this receipt",
-      ];
-    } else if (type === 'Form') {
-      return [
-        "What is the name on this form?",
-        "What is the date of birth?",
-        "What is the email address?",
-        "Summarize this form",
-      ];
-    } else {
-      return [
-        "Summarize this document",
-        "What information is in this document?",
-        "What is the total amount?",
-        "What is the date?",
-      ];
-    }
-  } catch {
-    return [
-      "Summarize this document",
-      "What is the total amount?",
-      "What is the date?",
-    ];
-  }
+  const doc = await getDocument(documentId);
+  if (!doc) return [];
+  const prompts = ['Summarize this document', ...doc.extractedFields.slice(0, 4).map(field => `What is the ${field.label.toLowerCase()}?`)];
+  if (doc.lineItems?.length) prompts.push('What products are listed?');
+  return [...new Set(prompts)];
 }
 
 export async function getActivityEvents(): Promise<ActivityEvent[]> {
   const data = await apiClient('/activity');
   return data.events;
+}
+
+export const getOriginalBlob = async (id: string): Promise<Blob> => (await apiResponse(`/documents/${id}/file`)).blob();
+export async function clearConversation(id: string): Promise<void> {
+  await apiClient(`/documents/${id}/questions`, { method: 'DELETE' });
 }

@@ -1,227 +1,181 @@
-import { DocumentType, ExtractedField, LineItem } from '../types';
+import { DocumentType, DocumentPage, ExtractedField, LineItem } from '../types';
+
+const AMOUNT = /^(?:(?:USD|INR|EUR|GBP|Rs\.?|[$€£₹])\s*)?-?\d[\d,.]*(?:\s*(?:USD|INR|EUR|GBP))?$/i;
+const MONEY_TOKEN = '(?:(?:USD|INR|EUR|GBP|Rs\\.?|[$€£₹])\\s*)?-?\\d[\\d,.]*(?:\\s*(?:USD|INR|EUR|GBP))?';
+const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 export class StructuredFieldExtractor {
-  extractFields(text: string, type: DocumentType): { extractedFields: ExtractedField[], lineItems?: LineItem[] } {
+  extractFields(text: string, type: DocumentType, pages?: DocumentPage[]): { extractedFields: ExtractedField[]; lineItems: LineItem[] } {
     const fields: ExtractedField[] = [];
-    const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-
-    if (type === 'Invoice') {
-      // --- Invoice Number ---
-      // Handles: "Invoice No : 201000", "Invoice #: INV-001", "Invoice Number: 12345", "No. 201000", and bad OCR "vole Nos 201000"
-      const invNumPatterns = [
-        /(?:invoice|vole)\s+(?:no|num|number|#|ref|nos)\.?\s*[:\-]?\s*([A-Z0-9][A-Z0-9\-\/]+)/i,
-        /inv(?:oice)?\s*(?:no|num|#)?\s*[:\-]\s*([A-Z0-9][A-Z0-9\-\/]+)/i,
-        /(?:^|\n)no\.?\s*[:\-]?\s*(\d{4,})/im,
-      ];
-      for (const pat of invNumPatterns) {
-        const m = text.match(pat);
-        // Ensure we captured at least 3 chars and it doesn't look like a word
-        if (m && m[1] && m[1].length >= 2 && !/^(no|num|the|of|to|by)$/i.test(m[1])) {
-          fields.push({ label: 'Invoice Number', value: m[1].trim(), confidence: 0.95 });
-          break;
+    const items: LineItem[] = [];
+    const canonical = new Map<string, string>();
+    const partyRows = new Set<number>();
+    const heading = /^(?:invoice(?: no\.?| number| date| id)?|receipt(?: no\.?| number| date)?|(?:due|issue|birth) date|date|state|tax category|place of supply|gst(?: number)?|vehicle number|captain name|customer(?: name| (?:pick up|pickup|billing|shipping) address)?|(?:pick up|pickup|billing|shipping) address|bill(?:ed)? to|bill details|payment summary|total(?: amount)?|sub[ -]?total|from|to|tax|currency|email|phone)\s*[:#]?$/i;
+    const validValue = (label: string, value: string) => {
+      if (heading.test(value)) return false;
+      if (/\bdate\b/i.test(label)) return /\d/.test(value) && /\d{1,4}[-/.]\d{1,2}[-/.]\d{1,4}|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b/i.test(value);
+      if (/^(?:Invoice|Receipt) Number$/.test(label)) return /^[\p{L}\p{N}_/#.-]+$/u.test(value);
+      return true;
+    };
+    const rows = (pages || [{ page: 1, text, extractionMethod: 'text' as const }]).flatMap(page => page.text.split('\n').map(line => ({ page: page.page, line: line.trim() })).filter(row => row.line));
+    const add = (label: string, value: string, row: typeof rows[number], confidence = 0.9) => {
+      if (value.trim() && !fields.some(field => field.label.toLowerCase() === label.toLowerCase() && field.value === value.trim())) fields.push({ label, value: value.trim(), page: row.page, snippet: row.line, confidence });
+    };
+    const labeled = (label: string, aliases: string[]) => {
+      for (const alias of aliases) canonical.set(alias.toLowerCase(), label);
+      const pattern = new RegExp(`^(?:${[...aliases].sort((a, b) => b.length - a.length).map(escape).join('|')})(?:[ \\t]*[:#][ \\t]*|[ \\t]+|$)(.*)$`, 'i');
+      for (let index = 0; index < rows.length; index++) {
+        const row = rows[index];
+        const match = row.line.match(pattern);
+        if (!match) continue;
+        const next = rows[index + 1];
+        let value = match[1].trim() || (next?.page === row.page ? next.line : '');
+        if (!value || !validValue(label, value)) continue;
+        let snippet = match[1].trim() ? row.line : `${row.line}\n${value}`;
+        if (/address$/i.test(label) && !match[1].trim()) {
+          for (let following = index + 2; following < rows.length; following++) {
+            const continuation = rows[following];
+            if (continuation.page !== row.page || heading.test(continuation.line) || /\t|:/.test(continuation.line)) break;
+            value += '\n' + continuation.line; snippet += '\n' + continuation.line;
+          }
         }
-      }
-
-      // --- Date / Invoice Date ---
-      // Handles: "May 27th, 2020", "2024-01-15", "27/01/2024", "Jan 15, 2024" and bad OCR "say 272520"
-      const datePatterns = [
-        /(?:invoice\s+date|date\s+issued|date)[:\s]+([A-Za-z]+\.?\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4})/i,
-        /(?:invoice\s+date|date\s+issued|date)[:\s]+(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4})/i,
-        /(?:invoice\s+date|date\s+issued|date)[:\s]+(\d{4}[\/\-\.]\d{1,2}[\/\-\.]\d{1,2})/i,
-        /(?:invoice\s+date|date\s+issued|date).*?(say\s*\d+|[A-Za-z]+\s+\d{1,2}.{0,5}\d{4})/i,
-        /([A-Za-z]+\s+\d{1,2}(?:st|nd|rd|th)?,\s+\d{4})/,
-        /(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/,
-      ];
-      for (const pat of datePatterns) {
-        const m = text.match(pat);
-        if (m) { fields.push({ label: 'Invoice Date', value: m[1].trim(), confidence: 0.90 }); break; }
-      }
-
-      // --- Due Date ---
-      const dueDatePatterns = [
-        /(?:due\s+date|payment\s+due|pay\s+by)[:\s]+([A-Za-z0-9,\s\/\-\.]+?)(?:\n|$)/i,
-      ];
-      for (const pat of dueDatePatterns) {
-        const m = text.match(pat);
-        if (m && m[1].trim().length > 2) {
-          fields.push({ label: 'Due Date', value: m[1].trim(), confidence: 0.85 });
-          break;
+        if (label === 'Payment Method' && /\t/.test(value)) {
+          const cells = value.split(/\t+/);
+          if (cells.length === 2 && AMOUNT.test(cells[1])) {
+            add('Amount Paid', cells[1], { ...row, line: snippet });
+            value = cells[0];
+          }
         }
+        add(label, value, { ...row, line: snippet });
+        break;
       }
-
-      // --- Vendor / Seller (FROM section) ---
-      // Look for "FROM" section first, then fallback patterns
-      const fromSectionMatch = text.match(/(?:FROM|from ©)\s*\n?([A-Za-z0-9\s&.,'¥-]+?)(?:\n|XVZ|$)/i);
-      if (fromSectionMatch && fromSectionMatch[1].trim().length > 2) {
-        fields.push({ label: 'Vendor / Seller', value: fromSectionMatch[1].replace(/X¥Z/, 'XYZ').trim(), confidence: 0.90 });
-      } else {
-        const sellerPatterns = [
-          /(?:from|sold\s+by|vendor|seller|billed?\s+from)[:\s]+([A-Za-z0-9\s&.,'¥-]+?)(?:\n|$)/i,
-        ];
-        for (const pat of sellerPatterns) {
-          const m = text.match(pat);
-          if (m && m[1].trim().length > 2 && !/^(your|the|this)/i.test(m[1].trim())) {
-            fields.push({ label: 'Vendor / Seller', value: m[1].replace(/X¥Z/, 'XYZ').trim(), confidence: 0.80 });
+    };
+    // Explicit fields can appear in every document type, including unknown documents.
+    const common: [string, string[]][] = [
+      ['Vendor / Seller', ['Vendor', 'Vendor Name', 'Supplier', 'Seller', 'Sold by', 'Issued by', 'From']],
+      ['Bill To', ['Bill To', 'Billed To', 'Customer', 'Customer Name', 'Buyer', 'Client']],
+      ['Email', ['Email', 'E-mail', 'Email Address']], ['Phone', ['Phone', 'Telephone', 'Mobile', 'Tel']],
+      ['Address', ['Address', 'Vendor Address', 'Supplier Address']], ['Currency', ['Currency']],
+      ['Customer Address', ['Customer Address', 'Customer Pick Up Address', 'Customer Pickup Address', 'Billing Address']],
+      ['Payment Terms', ['Payment Terms', 'Terms']], ['Payment Method', ['Payment Method', 'Paid by', 'Tender', 'Paid Using', 'You Paid Using']],
+      ['Payment Status', ['Payment Status', 'Invoice Status']],
+      ['Tax Rate', ['Tax Rate', 'Tax Percentage', 'GST Rate', 'VAT Rate']],
+      ['GST Number', ['GST Number', 'GSTIN', 'GST Registration Number']],
+    ];
+    common.forEach(([label, aliases]) => labeled(label, aliases));
+    if (type === 'Invoice' || type === 'Receipt') {
+      labeled(type === 'Invoice' ? 'Invoice Number' : 'Receipt Number', [`${type} Number`, `${type} No.`, `${type} No`, `${type} #`, `${type} ID`]);
+      const bare = rows.find(row => new RegExp(`^${type}\\s*[:#]\\s*\\S+`, 'i').test(row.line));
+      if (bare) add(`${type} Number`, bare.line.replace(new RegExp(`^${type}\\s*[:#]\\s*`, 'i'), ''), bare);
+      labeled(type === 'Invoice' ? 'Invoice Date' : 'Date', ['Invoice Date', 'Receipt Date', 'Date Issued', 'Issue Date', 'Date']);
+      labeled('Due Date', ['Due Date', 'Payment Due', 'Pay by']);
+      const amounts: [string, string[]][] = [
+        ['Total', ['Grand Total', 'Total Amount Due', 'Total Amount', 'Total Due', 'Amount Due', 'Balance Due', 'Net Payable', 'Total']],
+        ['Subtotal', ['Subtotal', 'Sub Total', 'Sub-total']],
+        ['Tax', ['Tax', 'Tax Amount', 'GST', 'VAT', 'Sales Tax']], ['Discount', ['Discount', 'Discount Amount']],
+        ['Amount Paid', ['Amount Paid', 'Paid Amount', 'Total Paid']],
+      ];
+      for (const [label, aliases] of amounts) {
+        for (const alias of aliases) canonical.set(alias.toLowerCase(), label);
+        // Alias order deliberately prioritizes final payable/grand total over plain total.
+        for (const alias of aliases) {
+          const pattern = new RegExp(`^${escape(alias)}(?:[ \\t]*\\([^)]*\\))?(?:[ \\t]*[:=][ \\t]*|[ \\t]+|$)(.*)$`, 'i');
+          let found = false;
+          for (let index = 0; index < rows.length; index++) {
+            const row = rows[index];
+            const match = row.line.match(pattern);
+            if (!match) continue;
+            const raw = match[1].trim() || (rows[index + 1]?.page === row.page ? rows[index + 1].line : '');
+            const rate = raw.match(/^(\d+(?:\.\d+)?\s*%)\s+(.+)$/);
+            const value = rate ? rate[2] : raw;
+            if (label === 'Tax' && /^\d+(?:\.\d+)?\s*%$/.test(raw)) {
+              add('Tax Rate', raw, { ...row, line: match[1].trim() ? row.line : `${row.line}\n${raw}` });
+              found = true;
+              break;
+            }
+            if (!AMOUNT.test(value)) continue;
+            const source = { ...row, line: match[1].trim() ? row.line : `${row.line}\n${raw}` };
+            add(label, value, source);
+            if (rate && label === 'Tax') add('Tax Rate', rate[1], source);
+            const printedRate = row.line.match(/\((\d+(?:\.\d+)?\s*%)\)/);
+            if (printedRate && label === 'Tax') add('Tax Rate', printedRate[1], source);
+            found = true;
             break;
           }
+          if (found) break;
         }
       }
-
-      // --- Bill To / Client ---
-      const toSectionMatch = text.match(/(?:TO|Bill\s+To|Client)[:\s]*\n([A-Za-z0-9\s&.,'-]+?)(?:\n|$)/i);
-      if (toSectionMatch && toSectionMatch[1].trim().length > 2) {
-        fields.push({ label: 'Bill To', value: toSectionMatch[1].trim(), confidence: 0.85 });
-      } else {
-        // Fallback for when Tesseract mashes them on one line: "X¥Z Seller XVZ Buyer"
-        const mashedMatch = text.match(/(?:X¥Z Seller|XYZ Seller)\s+(XVZ Buyer|XYZ Buyer)/i);
-        if (mashedMatch) {
-            fields.push({ label: 'Bill To', value: 'XYZ Buyer', confidence: 0.70 });
-        } else {
-          const billToMatch = text.match(/(?:bill\s+to|client|customer|to)[:\s]+([A-Za-z0-9\s&.,'-]+?)(?:\n|$)/i);
-          if (billToMatch && billToMatch[1].trim().length > 2) {
-            fields.push({ label: 'Bill To', value: billToMatch[1].trim(), confidence: 0.75 });
+      // Two-column FROM / TO blocks: retain the actual values without guessing OCR repairs.
+      const blockIndex = rows.findIndex(row => /^(?:from|vendor|seller)\s*\t+\s*(?:to|bill to|buyer|customer)\s*$/i.test(row.line));
+      if (blockIndex >= 0 && rows[blockIndex + 1]?.page === rows[blockIndex].page) {
+        const values = rows[blockIndex + 1].line.split(/\t+/);
+        if (values.length === 2) {
+          partyRows.add(blockIndex + 1);
+          const source = { ...rows[blockIndex], line: `${rows[blockIndex].line}\n${rows[blockIndex + 1].line}` };
+          add('Vendor / Seller', values[0], source); add('Bill To', values[1], source);
+        }
+      }
+      if (!fields.some(field => field.label === 'Vendor / Seller')) {
+        const heading = rows.slice(0, 4).find(row => /\b(?:ltd\.?|limited|inc\.?|llc|technologies|solutions|corp\.?|store)\b/i.test(row.line) && !/[:\t]|customer|bill to/i.test(row.line));
+        if (heading) add('Vendor / Seller', heading.line, heading, 0.65);
+      }
+      if (type === 'Receipt') {
+        const store = fields.find(field => field.label === 'Vendor / Seller');
+        if (store) fields.push({ ...store, label: 'Store' });
+        else if (rows[0] && !/^receipt\b/i.test(rows[0].line) && !/:|\d/.test(rows[0].line)) add('Store', rows[0].line, rows[0], 0.6);
+      }
+      let columns: string[] = [];
+      for (const row of rows) {
+        let cells = row.line.split(/\t+|\s{2,}|\s*\|\s*/).map(cell => cell.trim()).filter(Boolean);
+        if (/\b(?:description|product|item|service)\b/i.test(row.line) && /\b(?:qty|quantity)\b/i.test(row.line) && /\b(?:price|rate)\b/i.test(row.line) && /\b(?:amount|total)\b/i.test(row.line)) {
+          columns = cells.length >= 4 ? cells : ['Description', 'Quantity', 'Unit Price', 'Amount'];
+          continue;
+        }
+        if (!columns.length || /^(?:sub[ -]?total|grand total|total|tax|gst|vat|discount|amount due)\b/i.test(row.line)) continue;
+        const descIndex = columns.findIndex(cell => /description|product|item|service/i.test(cell));
+        const qtyIndex = columns.findIndex(cell => /qty|quantity/i.test(cell));
+        const priceIndex = columns.findIndex(cell => /price|rate/i.test(cell));
+        const amountIndex = columns.findIndex(cell => /amount|total/i.test(cell));
+        if (cells.length !== columns.length && descIndex === 0 && qtyIndex === 1 && priceIndex === 2 && amountIndex === 3) {
+          const match = row.line.match(new RegExp(`^(.*?)\\s+(\\d+(?:\\.\\d+)?)\\s+(${MONEY_TOKEN})\\s+(${MONEY_TOKEN})$`, 'i'));
+          if (match) cells = match.slice(1);
+        }
+        if (cells.length !== columns.length || [descIndex, qtyIndex, priceIndex, amountIndex].includes(-1)) continue;
+        if (!/^\d+(?:\.\d+)?$/.test(cells[qtyIndex]) || !AMOUNT.test(cells[priceIndex]) || !AMOUNT.test(cells[amountIndex])) continue;
+        items.push({ id: `li-${items.length + 1}`, description: cells[descIndex], quantity: cells[qtyIndex], unitPrice: cells[priceIndex], amount: cells[amountIndex], serviceUsage: '', page: row.page, snippet: row.line });
+      }
+    }
+    if (type === 'Form') {
+      labeled('Name', ['Full Name', 'Applicant Name', 'Name']);
+      labeled('Date of Birth', ['Date of Birth', 'DOB', 'Birth Date']);
+    }
+    // No cap: keep every explicit key/value pair, including fields outside the common schema.
+    for (let index = 0; index < rows.length; index++) {
+      if (partyRows.has(index)) continue;
+      const row = rows[index];
+      const cells = row.line.split(/\t+/).map(cell => cell.trim());
+      if (cells.length === 2 && /^[\p{L}][\p{L}\p{N} ()/#.%&-]{1,60}$/u.test(cells[0]) && validValue(canonical.get(cells[0].toLowerCase()) || cells[0], cells[1]) && !fields.some(field => field.snippet === row.line)) {
+        let label = canonical.get(cells[0].toLowerCase()) || cells[0];
+        if (['Total', 'Subtotal', 'Tax', 'Discount', 'Amount Paid'].includes(label) && !AMOUNT.test(cells[1])) {
+          if (/^gst$/i.test(cells[0]) && /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z0-9]{10,20}$/.test(cells[1])) label = 'GST Number';
+          else if (label === 'Tax' && /^\d+(?:\.\d+)?\s*%$/.test(cells[1])) label = 'Tax Rate';
+          else continue;
+        }
+        let value = cells[1]; let snippet = row.line;
+        if (!AMOUNT.test(value)) {
+          for (let following = index + 1; following < rows.length; following++) {
+            const continuation = rows[following];
+            if (continuation.page !== row.page || heading.test(continuation.line) || /\t|:/.test(continuation.line) || AMOUNT.test(continuation.line) || !/[\p{L}]/u.test(continuation.line)) break;
+            value += '\n' + continuation.line; snippet += '\n' + continuation.line;
           }
         }
+        add(label, value, { ...row, line: snippet }, 0.85);
       }
-
-      // --- Subtotal ---
-      const subtotalPatterns = [
-        /(?:subtotal|subtout)[\s:]*\$?s?\s*([\d,]+\.?\d{0,2})/i,
-        /sub[\s\-]?total[\s:]*\$?\s*([\d,]+\.?\d{0,2})/i,
-      ];
-      for (const pat of subtotalPatterns) {
-        const m = text.match(pat);
-        if (m) { fields.push({ label: 'Subtotal', value: `$${m[1].replace(/,/g, '')}`, confidence: 0.85 }); break; }
+      for (const part of row.line.split(/\t+(?=[^:\t]{1,50}:)/)) {
+        const match = part.match(/^([\p{L}][\p{L}\p{N} ()/#.-]{1,50}):[ \t]*(\S.*)$/u);
+        if (match && !fields.some(field => field.snippet === row.line)) add(match[1].trim(), match[2], row, 0.8);
       }
-
-      // --- Tax ---
-      const taxPatterns = [
-        /tax\s*(?:\([^)]*\))?\s*[\s:]*\$?s?a?\s*([\d,]+\.?\d{0,2})/i,
-        /(?:vat|gst)\s*(?:\([^)]*\))?\s*[\s:]*\$?\s*([\d,]+\.?\d{0,2})/i,
-      ];
-      for (const pat of taxPatterns) {
-        const m = text.match(pat);
-        if (m) { fields.push({ label: 'Tax', value: `$${m[1].replace(/,/g, '')}`, confidence: 0.82 }); break; }
-      }
-
-      // --- Total (must come AFTER subtotal/tax to avoid duplicates) ---
-      const totalPatterns = [
-        /(?:grand\s+total|total\s+amount\s+due|amount\s+due|total\s+due|balance\s+due|Tout\s+sco)[:\s]*\$?\s*([\d,]+\.?\d{0,2})?/i,
-        /(?:^|\n)\s*total[:\s]*\$?\s*([\d,]+\.?\d{0,2})/im,
-      ];
-      for (const pat of totalPatterns) {
-        const m = text.match(pat);
-        if (m) { 
-          // Handle case where OCR completely lost the number like "Tout sco"
-          const val = m[1] ? m[1].replace(/,/g, '') : "6045.00";
-          fields.push({ label: 'Total', value: `$${val}`, confidence: 0.90 }); 
-          break; 
-        }
-      }
-
-      // --- Payment Terms ---
-      const termsMatch = text.match(/(?:terms?|payment\s+terms?|note)[:\s]+([A-Za-z0-9\/,\s\.\-]+?)(?:\n|$)/i);
-      if (termsMatch && termsMatch[1].trim().length > 3) {
-        fields.push({ label: 'Payment Terms', value: termsMatch[1].trim(), confidence: 0.70 });
-      }
-
-      // --- Line Items extraction ---
-      const lineItems: LineItem[] = [];
-      // Look for table rows: "Description   Qty   Rate   Amount"
-      const lineItemRegex = /^(.{3,40}?)\s{2,}(\d+(?:\.\d+)?)\s{2,}(\$?[\d,]+\.?\d{0,2})\s{2,}\$?([\d,]+\.?\d{0,2})\s*$/gm;
-      let liMatch;
-      let liId = 1;
-      while ((liMatch = lineItemRegex.exec(text)) !== null) {
-        const desc = liMatch[1].trim();
-        const qty = liMatch[2];
-        const rate = liMatch[3];
-        const amount = liMatch[4];
-        // Filter out header rows
-        if (!/item|description|hrs|qty|rate|subtotal|amount|total/i.test(desc)) {
-          lineItems.push({
-            id: `li-${liId++}`,
-            description: desc,
-            serviceUsage: `${qty} units`,
-            quantity: qty,
-            unitPrice: rate.startsWith('$') ? rate : `$${rate}`,
-            amount: `$${amount.replace(/,/g, '')}`,
-          });
-        }
-      }
-
-      return { extractedFields: fields, lineItems: lineItems.length > 0 ? lineItems : undefined };
     }
-
-    else if (type === 'Receipt') {
-      // Store name (first non-empty line)
-      if (lines[0] && lines[0].length > 2) {
-        fields.push({ label: 'Store', value: lines[0], confidence: 0.65 });
-      }
-
-      // Date
-      const datePatterns = [
-        /(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/,
-        /([A-Za-z]+\s+\d{1,2},?\s+\d{4})/,
-      ];
-      for (const pat of datePatterns) {
-        const m = text.match(pat);
-        if (m) { fields.push({ label: 'Date', value: m[1].trim(), confidence: 0.85 }); break; }
-      }
-
-      // Total
-      const totalMatch = text.match(/(?:total|amount)[:\s]*\$?\s*([\d,]+\.?\d{0,2})/i);
-      if (totalMatch) fields.push({ label: 'Total', value: `$${totalMatch[1].replace(/,/g, '')}`, confidence: 0.88 });
-
-      // Tax
-      const taxMatch = text.match(/tax[:\s]*\$?\s*([\d,]+\.?\d{0,2})/i);
-      if (taxMatch) fields.push({ label: 'Tax', value: `$${taxMatch[1].replace(/,/g, '')}`, confidence: 0.80 });
-
-      // Payment method
-      const payMatch = text.match(/(?:payment|paid\s+by|tender)[:\s]+(cash|credit|debit|visa|mastercard|card)/i);
-      if (payMatch) fields.push({ label: 'Payment Method', value: payMatch[1], confidence: 0.85 });
-
-      return { extractedFields: fields };
-    }
-
-    else if (type === 'Form') {
-      // Name
-      const nameMatch = text.match(/(?:full\s+name|name)[:\s]+([A-Za-z\s]+?)(?:\n|$)/i);
-      if (nameMatch) fields.push({ label: 'Name', value: nameMatch[1].trim(), confidence: 0.85 });
-
-      // DOB
-      const dobMatch = text.match(/(?:date\s+of\s+birth|dob|birth\s+date)[:\s]+([A-Za-z0-9,\s\/\-]+?)(?:\n|$)/i);
-      if (dobMatch) fields.push({ label: 'Date of Birth', value: dobMatch[1].trim(), confidence: 0.90 });
-
-      // Email
-      const emailMatch = text.match(/([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})/);
-      if (emailMatch) fields.push({ label: 'Email', value: emailMatch[1], confidence: 0.98 });
-
-      // Phone
-      const phoneMatch = text.match(/(?:phone|mobile|tel|contact)[:\s]+([0-9\s\+\-\(\)]{7,20})/i);
-      if (phoneMatch) fields.push({ label: 'Phone', value: phoneMatch[1].trim(), confidence: 0.88 });
-
-      // Address
-      const addressMatch = text.match(/(?:address)[:\s]+([A-Za-z0-9\s,\.#-]+?)(?:\n|$)/i);
-      if (addressMatch) fields.push({ label: 'Address', value: addressMatch[1].trim(), confidence: 0.75 });
-
-      return { extractedFields: fields };
-    }
-
-    else {
-      // Unknown / Generic: extract any key: value pairs we can find
-      const kvPattern = /^([A-Za-z][A-Za-z\s]{1,30})[:\-]\s*(.{2,80})$/gm;
-      let match;
-      let count = 0;
-      while ((match = kvPattern.exec(text)) !== null && count < 8) {
-        const key = match[1].trim();
-        const val = match[2].trim();
-        const skipKeys = /^(the|a|an|is|are|was|were|in|on|at|by|to|of|from|and|or|for)$/i;
-        if (!skipKeys.test(key) && val.length > 0 && !fields.find(f => f.label === key)) {
-          fields.push({ label: key, value: val, confidence: 0.50 });
-          count++;
-        }
-      }
-      return { extractedFields: fields };
-    }
+    return { extractedFields: fields, lineItems: items };
   }
 }

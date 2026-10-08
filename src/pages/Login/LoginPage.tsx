@@ -3,28 +3,34 @@ import { useNavigate } from 'react-router-dom';
 import { Layers, ShieldCheck, Lock, Mail, Sparkles } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../context/AuthContext';
+import { apiClient } from '../../services/api/apiClient';
 
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const { login } = useAuth();
 
-  const [email, setEmail] = useState('alex.parker@enterprise.internal');
-  const [password, setPassword] = useState('••••••••••••');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [registering, setRegistering] = useState(false);
+  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setTimeout(() => {
-      login(email);
-      setLoading(false);
+    setError('');
+    try {
+      if (registering) await apiClient('/auth/register', { method: 'POST', body: JSON.stringify({ email, password, fullName }) });
+      await login(email, password);
       navigate('/dashboard');
-    }, 400);
+    } catch (err) { setError(err instanceof Error ? err.message : 'Unable to sign in'); }
+    finally { setLoading(false); }
   };
 
   const handleDemoLogin = () => {
-    login('alex.parker@enterprise.internal');
-    navigate('/dashboard');
+    setRegistering(!registering);
+    setError('');
   };
 
   return (
@@ -50,6 +56,11 @@ export const LoginPage: React.FC = () => {
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
+          {registering && <label className="block text-[12px] font-semibold text-[#334155] dark:text-[#CBD5E1]">
+            Full Name
+            <input value={fullName} onChange={e => setFullName(e.target.value)} required autoComplete="name" className="w-full h-[38px] px-3 mt-1 text-[13px] rounded-[4px] bg-[#F8FAFC] dark:bg-[#162032] border border-[#CBD5E1] dark:border-[#475569] text-[#0F172A] dark:text-[#F8FAFC]" />
+          </label>}
+          {error && <p role="alert" className="text-[12px] text-red-600">{error}</p>}
           <div>
             <label className="block text-[12px] font-semibold text-[#334155] dark:text-[#CBD5E1] mb-1">
               Work Email Address
@@ -72,14 +83,13 @@ export const LoginPage: React.FC = () => {
               <label className="text-[12px] font-semibold text-[#334155] dark:text-[#CBD5E1]">
                 Master Password
               </label>
-              <a href="#forgot" className="text-[11px] text-[#1E40AF] dark:text-[#60A5FA] hover:underline">
-                Forgot password?
-              </a>
             </div>
             <div className="relative">
               <Lock className="w-4 h-4 text-[#64748B] absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="password"
+                minLength={registering ? 8 : undefined}
+                autoComplete={registering ? 'new-password' : 'current-password'}
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -95,7 +105,7 @@ export const LoginPage: React.FC = () => {
             loading={loading}
             className="w-full mt-2"
           >
-            Sign In to Enterprise Workspace
+            {registering ? 'Create Account' : 'Sign In to Workspace'}
           </Button>
 
           <div className="relative my-4">
@@ -104,7 +114,7 @@ export const LoginPage: React.FC = () => {
             </div>
             <div className="relative flex justify-center text-[11px] uppercase">
               <span className="bg-white dark:bg-[#1E293B] px-2 text-[#64748B] font-mono">
-                or instant demo
+                {registering ? 'already registered?' : 'new to Prashn?'}
               </span>
             </div>
           </div>
@@ -115,16 +125,17 @@ export const LoginPage: React.FC = () => {
             size="md"
             icon={<Sparkles className="w-3.5 h-3.5 text-[#1E40AF]" />}
             onClick={handleDemoLogin}
+            disabled={loading}
             className="w-full"
           >
-            Explore as Alex Parker (Admin Demo)
+            {registering ? 'Sign In Instead' : 'Create a New Account'}
           </Button>
         </form>
 
         {/* Security badge */}
         <div className="mt-8 pt-4 border-t border-[#E2E8F0] dark:border-[#334155] flex items-center justify-center gap-1.5 text-[11px] text-[#059669]">
           <ShieldCheck className="w-4 h-4" />
-          <span>SOC2 Type II · AWS us-east-1 TLS 1.3 Vault</span>
+          <span>Local accounts · Documents are scoped to your user</span>
         </div>
       </div>
     </div>

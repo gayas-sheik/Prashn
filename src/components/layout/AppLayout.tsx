@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, Navigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 import { Sidebar } from './Sidebar';
 import { TopNav } from './TopNav';
 import { MobileNav } from './MobileNav';
@@ -7,6 +8,9 @@ import { MobileNav } from './MobileNav';
 export const AppLayout: React.FC = () => {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { loading, isAuthenticated } = useAuth();
+  if (loading) return <div className="p-12 text-center text-[#64748B]">Loading session...</div>;
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
 
   return (
     <div className="min-h-screen bg-prashn-canvas-light dark:bg-prashn-canvas-dark text-prashn-text-primary-light dark:text-prashn-text-primary-dark">

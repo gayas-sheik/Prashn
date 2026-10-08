@@ -27,16 +27,16 @@ export const SettingsPage: React.FC = () => {
   const [saveSuccess, setSaveSuccess] = useState(false);
 
   // Form states
-  const [fullName, setFullName] = useState(user?.name || 'Alex Parker');
-  const [email, setEmail] = useState(user?.email || 'alex.parker@enterprise.internal');
-  const [organization, setOrganization] = useState(user?.organization || 'CloudTech Solutions Ltd.');
+  const [fullName, setFullName] = useState(user?.name || '');
+  const [email, setEmail] = useState(user?.email || '');
+  const [organization, setOrganization] = useState(user?.organization || '');
   const [timezone, setTimezone] = useState('UTC-05:00 Eastern Time');
   const [currency, setCurrency] = useState('USD ($)');
   const [density, setDensity] = useState<'comfortable' | 'compact'>('comfortable');
 
   // OCR Preferences
   const [autoDetect, setAutoDetect] = useState(true);
-  const [ocrEngine, setOcrEngine] = useState('AWS Textract + Prashn LayoutLMv3');
+  const [ocrEngine, setOcrEngine] = useState('Local Tesseract OCR');
   const [confidenceThreshold, setConfidenceThreshold] = useState(85);
   const [extractTotals, setExtractTotals] = useState(true);
   const [extractTaxes, setExtractTaxes] = useState(true);
@@ -46,13 +46,10 @@ export const SettingsPage: React.FC = () => {
   const [notifyIngestion, setNotifyIngestion] = useState(true);
   const [notifyFailures, setNotifyFailures] = useState(true);
   const [weeklyDigest, setWeeklyDigest] = useState(false);
-  const [slackWebhook, setSlackWebhook] = useState('https://hooks.slack.com/services/T0019/B0021/X992182048');
+  const [slackWebhook, setSlackWebhook] = useState('');
 
-  // Sessions
-  const [sessions, setSessions] = useState([
-    { id: 's-1', device: 'Mac OS Chrome · us-east-1', active: true, time: 'Active Now' },
-    { id: 's-2', device: 'Mobile App: iOS 17.4 · New York', active: false, time: '2 days ago' },
-  ]);
+  // Only this browser session is known to the local client.
+  const [sessions, setSessions] = useState([{ id: 'current', device: navigator.userAgent, active: true, time: 'Current browser' }]);
 
   const handleSave = () => {
     setSaveSuccess(true);
@@ -92,7 +89,7 @@ export const SettingsPage: React.FC = () => {
               <CheckCircle2 className="w-4 h-4" /> Preferences Saved!
             </span>
           )}
-          <Button variant="secondary" size="md">
+          <Button variant="secondary" size="md" disabled title="Preferences apply immediately">
             Discard Changes
           </Button>
           <Button
@@ -100,6 +97,7 @@ export const SettingsPage: React.FC = () => {
             size="md"
             icon={<Save className="w-3.5 h-3.5" />}
             onClick={handleSave}
+            disabled={activeTab !== 'appearance'}
           >
             Save Preferences
           </Button>
@@ -131,7 +129,8 @@ export const SettingsPage: React.FC = () => {
         </div>
 
         {/* Right Settings Pane (9 cols) */}
-        <div className="md:col-span-9 space-y-6">
+        <fieldset disabled={activeTab !== 'appearance'} className="md:col-span-9 space-y-6">
+          {activeTab !== 'appearance' && <p className="text-[12px] text-[#64748B]">Account details are read-only. Processing uses backend environment settings. Cloud storage, notifications, password management and multi-device session controls are planned features.</p>}
           {/* TAB 1: Profile & Account */}
           {activeTab === 'profile' && (
             <Card title="Profile & Workspace Details" subtitle="Your corporate identity and organization parameters">
@@ -139,17 +138,17 @@ export const SettingsPage: React.FC = () => {
                 {/* User Avatar Card */}
                 <div className="flex items-center gap-4 p-3 bg-[#F8FAFC] dark:bg-[#162032] rounded-[4px] border border-[#E2E8F0] dark:border-[#2D3F5A]">
                   <div className="w-12 h-12 rounded-full bg-[#1E40AF] text-white flex items-center justify-center font-bold text-[16px]">
-                    AP
+                    {fullName.split(/\s+/).map(word => word[0]).join('').slice(0, 2)}
                   </div>
                   <div>
                     <div className="font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
                       {fullName}
                     </div>
                     <div className="text-[12px] text-[#64748B] dark:text-[#94A3B8]">
-                      Role: Admin / Cloud Architect
+                      Role: {user?.role}
                     </div>
                     <Badge variant="primary" className="mt-1">
-                      Organization Admin
+                      Local Account
                     </Badge>
                   </div>
                 </div>
@@ -325,6 +324,7 @@ export const SettingsPage: React.FC = () => {
                     </label>
                     <select
                       value={density}
+                      disabled
                       onChange={(e) => setDensity(e.target.value as any)}
                       className="w-full h-[36px] px-3 text-[13px] rounded-[4px] bg-white dark:bg-[#1E293B] border border-[#CBD5E1] dark:border-[#475569] text-[#0F172A] dark:text-[#F8FAFC]"
                     >
@@ -337,7 +337,7 @@ export const SettingsPage: React.FC = () => {
                     <label className="block text-[12px] font-semibold text-[#334155] dark:text-[#CBD5E1] mb-1">
                       Display Language
                     </label>
-                    <select className="w-full h-[36px] px-3 text-[13px] rounded-[4px] bg-white dark:bg-[#1E293B] border border-[#CBD5E1] dark:border-[#475569] text-[#0F172A] dark:text-[#F8FAFC]">
+                    <select disabled className="w-full h-[36px] px-3 text-[13px] rounded-[4px] bg-white dark:bg-[#1E293B] border border-[#CBD5E1] dark:border-[#475569] text-[#0F172A] dark:text-[#F8FAFC]">
                       <option>English (US) — Primary</option>
                       <option>English (UK)</option>
                       <option>Deutsch</option>
@@ -351,7 +351,7 @@ export const SettingsPage: React.FC = () => {
 
           {/* TAB 3: Processing & OCR Engine */}
           {activeTab === 'ocr' && (
-            <Card title="Cloud OCR & Ingestion Pipeline Preferences" subtitle="Control extraction thresholds and pipeline models">
+            <Card title="Local OCR Configuration" subtitle="Control extraction thresholds and pipeline models">
               <div className="space-y-4 text-[13px]">
                 {/* Auto-detect toggle */}
                 <div className="flex items-center justify-between p-3 rounded-[4px] bg-[#F8FAFC] dark:bg-[#162032] border border-[#E2E8F0] dark:border-[#2D3F5A]">
@@ -380,9 +380,9 @@ export const SettingsPage: React.FC = () => {
                     onChange={(e) => setOcrEngine(e.target.value)}
                     className="w-full h-[36px] px-3 text-[13px] rounded-[4px] bg-white dark:bg-[#1E293B] border border-[#CBD5E1] dark:border-[#475569] text-[#0F172A] dark:text-[#F8FAFC]"
                   >
-                    <option value="AWS Textract + Prashn LayoutLMv3">AWS Textract + Prashn LayoutLMv3 (Recommended)</option>
-                    <option value="AWS Textract Tables Only">AWS Textract Standard (Fast Tables)</option>
-                    <option value="Prashn High-Precision OCR">Prashn High-Precision Local Ingest</option>
+                    <option value="Local Tesseract OCR">Local Tesseract OCR</option>
+
+
                   </select>
                 </div>
 
@@ -516,13 +516,13 @@ export const SettingsPage: React.FC = () => {
                 <div className="flex items-center justify-between p-3 rounded-[4px] bg-[#ECFDF5] dark:bg-[#064E3B20] border border-[#A7F3D0] dark:border-[#065F46]">
                   <div>
                     <div className="font-semibold text-[#065F46] dark:text-[#34D399]">
-                      Two-Factor Authentication (2FA) Active
+                      Two-Factor Authentication (planned)
                     </div>
                     <div className="text-[12px] text-[#065F46] dark:text-[#A7F3D0]">
-                      Secured with TOTP Authenticator App.
+                      Local sign-in uses a password and JWT. 2FA is not configured.
                     </div>
                   </div>
-                  <Badge variant="success">Enabled</Badge>
+                  <Badge variant="neutral">Not configured</Badge>
                 </div>
 
                 <div>
@@ -568,22 +568,22 @@ export const SettingsPage: React.FC = () => {
 
           {/* TAB 6: Storage & Cloud Data */}
           {activeTab === 'storage' && (
-            <Card title="Storage Quota & Data Retention" subtitle="Amazon S3 bucket lifecycle rules and cold storage tiers">
+            <Card title="Storage Quota & Data Retention" subtitle="Cloud lifecycle policies are planned for the AWS phase">
               <div className="space-y-4 text-[13px]">
                 <div className="p-3 bg-[#F8FAFC] dark:bg-[#162032] rounded-[4px] border border-[#E2E8F0] dark:border-[#2D3F5A] space-y-2">
                   <div className="flex justify-between items-center">
                     <span className="font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
-                      S3 Bucket: prashn-vault-east1
+                      Local storage ? AWS deployment planned
                     </span>
                     <span className="font-mono text-[#1E40AF] dark:text-[#60A5FA]">
-                      14.2 GB of 50.0 GB (28%)
+                      See Dashboard for actual usage
                     </span>
                   </div>
                   <div className="w-full bg-[#E2E8F0] dark:bg-[#334155] h-2 rounded-[2px] overflow-hidden">
-                    <div className="bg-[#1E40AF] h-full" style={{ width: '28%' }} />
+                    <div className="bg-[#1E40AF] h-full" style={{ width: '0%' }} />
                   </div>
                   <div className="text-[11px] text-[#64748B]">
-                    Lifecycle Rule: Processed documents auto-archive to S3 Glacier after 365 days.
+                    Automatic archival and retention policies are not configured.
                   </div>
                 </div>
 
@@ -607,7 +607,7 @@ export const SettingsPage: React.FC = () => {
               </div>
             </Card>
           )}
-        </div>
+        </fieldset>
       </div>
     </div>
   );

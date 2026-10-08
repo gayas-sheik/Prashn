@@ -32,17 +32,21 @@ export const DocumentsPage: React.FC = () => {
   const [previewDoc, setPreviewDoc] = useState<DocumentItem | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [error, setError] = useState('');
 
   const loadDocs = async () => {
-    setLoading(true);
-    const data = await getDocuments();
-    setDocuments(data);
-    setLoading(false);
+    try { const data = await getDocuments(); setDocuments(data); setError(''); }
+    catch (err) { setError(err instanceof Error ? err.message : 'Unable to load documents'); }
+    finally { setLoading(false); }
   };
 
   useEffect(() => {
     loadDocs();
+    const timer = setInterval(loadDocs, 3000);
+    return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => { setCurrentPage(1); }, [searchQuery, statusFilter, typeFilter, dateRange]);
 
   const handleToggleSelect = (id: string) => {
     setSelectedIds((prev) =>
@@ -111,24 +115,29 @@ export const DocumentsPage: React.FC = () => {
       (doc.documentType || doc.type || '').toLowerCase().includes(searchQuery.toLowerCase());
 
     const matchesStatus =
-      statusFilter === 'All' ? true : doc.status === statusFilter;
+      statusFilter === 'All' ? true : statusFilter === 'Processing' ? ['Processing', 'Classifying', 'Extracting information'].includes(doc.status) : doc.status === statusFilter;
 
     const docType = doc.documentType || doc.type || 'Unknown';
     const matchesType =
       typeFilter === 'All' ? true : docType === typeFilter;
 
-    return matchesSearch && matchesStatus && matchesType;
+    const days = dateRange === 'Last 24 Hours' ? 1 : dateRange === 'Last 7 Days' ? 7 : dateRange === 'Last 30 Days' ? 30 : 0;
+    const now = new Date();
+    const uploaded = new Date(doc.uploadDate);
+    const matchesDate = days ? uploaded.getTime() >= now.getTime() - days * 86400000 : dateRange === 'This Quarter' ? uploaded.getFullYear() === now.getFullYear() && Math.floor(uploaded.getMonth() / 3) === Math.floor(now.getMonth() / 3) : uploaded.getFullYear() === now.getFullYear();
+    return matchesSearch && matchesStatus && matchesType && matchesDate;
   });
 
   const totalPages = Math.ceil(filteredDocuments.length / pageSize) || 1;
+  const visiblePage = Math.min(currentPage, totalPages);
   const paginatedDocs = filteredDocuments.slice(
-    (currentPage - 1) * pageSize,
-    currentPage * pageSize
+    (visiblePage - 1) * pageSize,
+    visiblePage * pageSize
   );
 
   const getStatusCount = (status: string) => {
     if (status === 'All') return documents.length;
-    return documents.filter(d => d.status === status || (status === 'Completed' && d.status.startsWith('Completed'))).length;
+    return documents.filter(d => status === 'Processing' ? ['Processing', 'Classifying', 'Extracting information'].includes(d.status) : d.status === status).length;
   };
 
   const statusTabs = [
@@ -141,6 +150,7 @@ export const DocumentsPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-[#E2E8F0] dark:border-[#334155]">
         <div>
@@ -240,7 +250,7 @@ export const DocumentsPage: React.FC = () => {
                 <option value="Last 7 Days">Last 7 Days</option>
                 <option value="Last 30 Days">Last 30 Days</option>
                 <option value="This Quarter">This Quarter</option>
-                <option value="Year 2026">Year 2026</option>
+                <option value="This Year">This Year</option>
               </select>
             </div>
           </div>
@@ -328,25 +338,25 @@ export const DocumentsPage: React.FC = () => {
           <div className="flex items-center gap-1">
             <button
               onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
+              disabled={visiblePage === 1}
               className="p-1 rounded-[4px] border border-[#CBD5E1] dark:border-[#475569] text-[#64748B] disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#F1F5F9] dark:hover:bg-[#334155]"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
             <button className="px-2.5 py-0.5 rounded-[4px] bg-[#1E40AF] text-white font-medium text-[12px]">
-              {currentPage}
+              {visiblePage}
             </button>
             {totalPages > 1 && (
               <button
                 onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                 className="px-2.5 py-0.5 rounded-[4px] border border-[#CBD5E1] dark:border-[#475569] hover:bg-[#F1F5F9] dark:hover:bg-[#334155] text-[#334155] dark:text-[#E2E8F0] font-medium text-[12px]"
               >
-                {Math.min(totalPages, currentPage + 1)}
+                {Math.min(totalPages, visiblePage + 1)}
               </button>
             )}
             <button
               onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages}
+              disabled={visiblePage === totalPages}
               className="p-1 rounded-[4px] border border-[#CBD5E1] dark:border-[#475569] text-[#64748B] disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#F1F5F9] dark:hover:bg-[#334155]"
             >
               <ChevronRight className="w-4 h-4" />

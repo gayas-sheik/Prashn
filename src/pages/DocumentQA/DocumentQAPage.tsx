@@ -17,8 +17,10 @@ import {
 } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
-import type { DocumentItem, QAMessage, QACitation } from '../../types';
-import { getDocument, getConversation, askQuestion, getSuggestedPrompts } from '../../services/api/documentService';
+import type { DocumentItem, QAMessage } from '../../types';
+import { getDocument, getConversation, askQuestion, getSuggestedPrompts, clearConversation } from '../../services/api/documentService';
+import { OriginalDocumentPreview } from '../../components/documents/OriginalDocumentPreview';
+import { MessageText } from '../../components/ui/MessageText';
 
 export const DocumentQAPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -30,21 +32,27 @@ export const DocumentQAPage: React.FC = () => {
   const [inputValue, setInputValue] = useState('');
   const [sending, setSending] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const citations = [...messages].reverse().find(message => message.sender === 'assistant')?.citations || [];
 
   useEffect(() => {
+    let disposed = false;
     const initData = async () => {
-      if (id) {
+      try { if (id) {
         const doc = await getDocument(id);
-        setDocument(doc);
         const conv = await getConversation(id);
-        setMessages(conv);
         const prompts = await getSuggestedPrompts(id);
-        setSuggestedPrompts(prompts);
-      }
+        if (!disposed) { setDocument(doc); setMessages(conv); setSuggestedPrompts(prompts); }
+      } } catch (err) { if (!disposed) setError(err instanceof Error ? err.message : 'Unable to load conversation'); }
+      finally { if (!disposed) setLoading(false); }
     };
-    initData();
+    setLoading(true); setError(''); setMessages([]); setDocument(null);
+    void initData();
+    const timer = setInterval(() => { if (id) getDocument(id).then(doc => { if (!disposed) setDocument(doc); }).catch(() => {}); }, 2500);
+    return () => { disposed = true; clearInterval(timer); };
   }, [id]);
 
   useEffect(() => {
@@ -53,7 +61,7 @@ export const DocumentQAPage: React.FC = () => {
 
   const handleSend = async (questionText?: string) => {
     const textToSend = questionText || inputValue;
-    if (!textToSend.trim() || sending || !id) return;
+    if (!textToSend.trim() || sending || !id || document?.status !== 'Completed') return;
 
     const userMsg: QAMessage = {
       id: `usr-${Date.now()}`,
@@ -65,10 +73,15 @@ export const DocumentQAPage: React.FC = () => {
     setMessages((prev) => [...prev, userMsg]);
     if (!questionText) setInputValue('');
     setSending(true);
-
-    const assistantMsg = await askQuestion(id, textToSend);
-    setMessages((prev) => [...prev, assistantMsg]);
-    setSending(false);
+    setError('');
+    try {
+      const assistantMsg = await askQuestion(id, textToSend);
+      setMessages((prev) => [...prev, assistantMsg]);
+    } catch (err) {
+      setMessages(prev => prev.filter(message => message.id !== userMsg.id));
+      setInputValue(textToSend);
+      setError(err instanceof Error ? err.message : 'Question failed');
+    } finally { setSending(false); }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -84,8 +97,10 @@ export const DocumentQAPage: React.FC = () => {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const handleClear = () => {
-    setMessages([]);
+  const handleClear = async () => {
+    if (!id || sending) return;
+    try { await clearConversation(id); setMessages([]); }
+    catch (err) { setError(err instanceof Error ? err.message : 'Unable to clear conversation'); }
   };
 
   const handleExport = () => {
@@ -102,10 +117,12 @@ export const DocumentQAPage: React.FC = () => {
   };
 
 
+  if (loading) return <div className="py-24 text-center text-[#64748B]">Loading document and conversation...</div>;
   if (!document) {
     return (
       <div className="py-24 text-center">
         <h2 className="text-[18px] font-bold text-[#0F172A] dark:text-[#F8FAFC]">Document Not Found</h2>
+        {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
         <Button variant="secondary" className="mt-4" onClick={() => navigate('/documents')}>
           Back to Documents
         </Button>
@@ -115,6 +132,7 @@ export const DocumentQAPage: React.FC = () => {
 
   return (
     <div className="space-y-4 max-w-7xl mx-auto">
+      {(error || document.status !== 'Completed') && <p role="status" className="p-3 text-sm text-red-600 border border-red-200 rounded">{error || (document.status === 'Failed' ? document.failureReason : `Document is ${document.status}. Questions become available when processing completes.`)}</p>}
       {/* Top Header & Breadcrumbs */}
       <div className="space-y-2 pb-2 border-b border-[#E2E8F0] dark:border-[#334155]">
         <div className="flex items-center gap-2 text-[12px] text-[#64748B] dark:text-[#94A3B8]">
@@ -159,7 +177,7 @@ export const DocumentQAPage: React.FC = () => {
           <div className="flex items-center gap-2">
             <span className="text-[11px] text-[#1E40AF] dark:text-[#93C5FD] bg-[#EFF6FF] dark:bg-[#1E3A8A30] border border-[#BFDBFE] dark:border-[#1E40AF] px-2.5 py-1 rounded-[4px] font-medium flex items-center gap-1.5">
               <ShieldCheck className="w-3.5 h-3.5" />
-              Strictly Grounded in OCR Payload (Zero Hallucinations)
+              Answers supported by document passages
             </span>
           </div>
         </div>
@@ -179,10 +197,10 @@ export const DocumentQAPage: React.FC = () => {
             }
             subtitle="Extracted key-values available for citations"
           >
-            <div className="space-y-2 text-[12px]">
-              {document.extractedFields?.slice(0, 4).map((f, i) => (
+            <div className="space-y-2 text-[12px] max-h-[360px] overflow-y-auto">
+              {document.extractedFields?.map((f, i) => (
                 <div key={i} className="p-2.5 rounded-[4px] bg-[#F8FAFC] dark:bg-[#162032] border border-[#E2E8F0] dark:border-[#2D3F5A] flex justify-between items-center">
-                  <span className="text-[#64748B]">{f.label}:</span>
+                  <span className="text-[#64748B]">{f.label}{f.page ? ` · Page ${f.page}` : ''}:</span>
                   <span className="font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
                     {f.value}
                   </span>
@@ -208,24 +226,15 @@ export const DocumentQAPage: React.FC = () => {
             noPadding
           >
             <div className="w-full bg-[#64748B10] h-[400px] flex items-center justify-center overflow-hidden">
-                {document.mimeType?.startsWith('image/') ? (
-                <img 
-                    src={`http://localhost:5000/api/documents/${document.id}/file?token=${localStorage.getItem('token')}`} 
-                    alt={document.name} 
-                    className="max-w-full max-h-full object-contain" 
-                    onError={(e) => {
-                    (e.target as HTMLImageElement).style.display = 'none';
-                    }}
-                />
-                ) : (
-                <embed 
-                    src={`http://localhost:5000/api/documents/${document.id}/file?token=${localStorage.getItem('token')}`} 
-                    type={document.mimeType} 
-                    className="w-full h-full" 
-                />
-                )}
+                <OriginalDocumentPreview id={document.id} name={document.name} mimeType={document.mimeType} />
             </div>
           </Card>
+          {citations.length > 0 && <Card title="Supporting Document Passages" subtitle="Sources for the latest cited answer">
+            <div className="space-y-3">{citations.map(citation => <div key={citation.id} className="text-xs">
+              <p className="font-semibold mb-1">Page {citation.page} · {citation.section}</p>
+              <p className="whitespace-pre-wrap break-words text-[#64748B]">{citation.snippet}</p>
+            </div>)}</div>
+          </Card>}
         </div>
 
         {/* Right Column (7 cols ~ 60%): Enterprise Document Q&A Chat */}
@@ -258,6 +267,7 @@ export const DocumentQAPage: React.FC = () => {
                   icon={<Trash2 className="w-3 h-3 text-[#E11D48]" />}
                   onClick={handleClear}
                   title="Clear Conversation"
+                  disabled={sending}
                 >
                   Clear
                 </Button>
@@ -274,7 +284,7 @@ export const DocumentQAPage: React.FC = () => {
                 <button
                   key={idx}
                   onClick={() => handleSend(p)}
-                  disabled={sending}
+                  disabled={sending || document.status !== 'Completed'}
                   className="px-2.5 py-1 rounded-[4px] bg-white dark:bg-[#1E293B] border border-[#CBD5E1] dark:border-[#475569] text-[#334155] dark:text-[#CBD5E1] hover:border-[#1E40AF] hover:text-[#1E40AF] whitespace-nowrap transition-colors text-left flex-shrink-0"
                 >
                   {p}
@@ -302,7 +312,7 @@ export const DocumentQAPage: React.FC = () => {
                     >
                       <div className="flex items-center gap-2 mb-1 px-1 text-[11px] text-[#64748B]">
                         <span className="font-medium">
-                          {isUser ? 'You (Alex Parker)' : 'Prashn AI Assistant'}
+                          {isUser ? 'You' : 'Prashn AI Assistant'}
                         </span>
                         <span>·</span>
                         <span className="font-mono">{msg.timestamp}</span>
@@ -315,13 +325,10 @@ export const DocumentQAPage: React.FC = () => {
                             : 'bg-white dark:bg-[#1E293B] border border-[#E2E8F0] dark:border-[#334155] text-[#0F172A] dark:text-[#F8FAFC]'
                         }`}
                       >
-                        {/* Message content */}
+                        {/* Message content is escaped by React. */}
                         <div
                           className="prose prose-sm dark:prose-invert max-w-none"
-                          dangerouslySetInnerHTML={{
-                            __html: msg.text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>'),
-                          }}
-                        />
+                        ><MessageText text={msg.text} /></div>
 
                         {/* Citation tag if attached */}
                         {msg.citations && msg.citations.length > 0 && (
@@ -363,7 +370,7 @@ export const DocumentQAPage: React.FC = () => {
                   <div className="flex items-center gap-2 mb-1 px-1 text-[11px] text-[#64748B]">
                     <span>Prashn Assistant</span>
                     <span>·</span>
-                    <span>Searching vectors...</span>
+                    <span>Searching document content...</span>
                   </div>
                   <div className="bg-white dark:bg-[#1E293B] border border-[#E2E8F0] dark:border-[#334155] rounded-[6px] p-3 text-[13px] flex items-center gap-2 text-[#64748B]">
                     <span className="w-2 h-2 rounded-full bg-[#1E40AF] animate-ping" />
@@ -384,7 +391,7 @@ export const DocumentQAPage: React.FC = () => {
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  disabled={sending}
+                  disabled={sending || document.status !== 'Completed'}
                   className="flex-1 h-[40px] px-3.5 text-[13px] rounded-[4px] bg-[#F8FAFC] dark:bg-[#162032] border border-[#CBD5E1] dark:border-[#475569] text-[#0F172A] dark:text-[#F8FAFC] placeholder-[#94A3B8] focus:outline-none focus:ring-1 focus:ring-[#1E40AF]"
                 />
 
@@ -394,7 +401,7 @@ export const DocumentQAPage: React.FC = () => {
                   icon={<Send className="w-3.5 h-3.5" />}
                   onClick={() => handleSend()}
                   loading={sending}
-                  disabled={!inputValue.trim()}
+                  disabled={!inputValue.trim() || document.status !== 'Completed'}
                 >
                   Send
                 </Button>
@@ -402,7 +409,7 @@ export const DocumentQAPage: React.FC = () => {
 
               <div className="flex items-center justify-between text-[11px] text-[#64748B] dark:text-[#94A3B8] mt-2 px-1 font-mono">
                 <span>Press Enter ↵ to send question</span>
-                <span>Grounding: Textract Tables + Form Blocks</span>
+                <span>Grounding: Document text + extracted fields</span>
               </div>
             </div>
           </Card>

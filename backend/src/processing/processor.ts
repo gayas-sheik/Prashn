@@ -1,7 +1,7 @@
 import { DocumentRepository } from '../repositories/document.repository';
 import { ActivityRepository } from '../repositories/activity.repository';
 import { getStorageProvider } from '../storage/storage.factory';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID, createHash } from 'crypto';
 import { DocumentStatus } from '../types';
 import { LocalExtractor } from './local.extractor';
 import { LocalClassifier } from './local.classifier';
@@ -10,111 +10,85 @@ import fs from 'fs';
 import path from 'path';
 import { config } from '../config/env';
 
-const docRepo = new DocumentRepository();
-const activityRepo = new ActivityRepository();
+const documents = new DocumentRepository();
+const activity = new ActivityRepository();
 const storage = getStorageProvider();
-const extractor = new LocalExtractor();
-const classifier = new LocalClassifier();
-const fieldExtractor = new StructuredFieldExtractor();
 
 export class DocumentProcessor {
-  async triggerPipeline(documentId: string, userId: string): Promise<void> {
-    this.process(documentId, userId).catch(err => {
-      console.error('Processing error for doc', documentId, err);
-      this.updateStatus(documentId, userId, 'Failed', 'system', err.message);
-    });
-  }
+  private queued: { id: string; userId: string }[] = [];
+  private pending = new Set<string>();
+  private active = new Map<string, Promise<void>>();
+  private cancelled = new Set<string>();
 
-  private async updateStatus(id: string, userId: string, status: DocumentStatus, uploaderEmail: string, reason?: string) {
-    await docRepo.updateDocument({ id, status, failureReason: reason });
-    await activityRepo.createEvent({
-      id: uuidv4(),
-      userId,
-      timestamp: new Date().toISOString(),
-      event: status === 'Failed' ? 'Processing Failed' : `Document ${status}`,
-      documentName: `Doc ${id}`,
-      documentId: id,
-      actor: 'System',
-      status: status === 'Failed' ? 'Failed' : 'Processing',
-      details: reason ? `Failed: ${reason}` : `Document status changed to ${status}`,
-      createdAt: new Date().toISOString()
-    });
-  }
-
-  private async process(documentId: string, userId: string) {
-    const doc = await docRepo.findByIdAndUserId(documentId, userId);
-    if (!doc) return;
-
-    const email = doc.uploaderName || 'system';
-    const startTime = Date.now();
-
+  async triggerPipeline(id: string, userId: string): Promise<void> {
+    if (this.pending.has(id)) return;
+    this.pending.add(id);
     try {
-      // 1. Queued
-      await this.updateStatus(documentId, userId, 'Queued', email);
+      await documents.updateDocument({ id, status: 'Queued', failureReason: null });
+      this.queued.push({ id, userId }); this.drain();
+    } catch (error) { this.pending.delete(id); throw error; }
+  }
+
+  async recover(): Promise<void> {
+    for (const doc of await documents.findPending()) await this.triggerPipeline(doc.id, doc.userId);
+  }
+
+  async cancel(id: string): Promise<void> {
+    this.cancelled.add(id);
+    this.queued = this.queued.filter(job => job.id !== id);
+    await this.active.get(id);
+    this.pending.delete(id); this.cancelled.delete(id);
+  }
+
+  private drain(): void {
+    while (this.queued.length && this.active.size < config.processingConcurrency) {
+      const job = this.queued.shift()!;
+      const task = this.process(job.id, job.userId).catch(error => console.error('Processing failed:', error)).finally(() => {
+        this.active.delete(job.id); this.pending.delete(job.id); this.drain();
+      });
+      this.active.set(job.id, task);
+    }
+  }
+
+  private async status(id: string, userId: string, status: DocumentStatus, reason?: string): Promise<void> {
+    if (this.cancelled.has(id)) throw new Error('Processing cancelled');
+    const doc = await documents.findByIdAndUserId(id, userId);
+    if (!doc) throw new Error('Document no longer exists');
+    await documents.updateDocument({ id, status, failureReason: reason || null });
+    await activity.createEvent({
+      id: randomUUID(), userId, timestamp: new Date().toISOString(), event: `Document ${status}`,
+      documentName: doc.originalFileName, documentId: id, actor: 'System',
+      status: status === 'Failed' ? 'Failed' : status === 'Completed' ? 'Success' : 'Processing',
+      details: reason || `Document status changed to ${status}`, createdAt: new Date().toISOString(),
+    });
+  }
+
+  private async process(id: string, userId: string): Promise<void> {
+    const doc = await documents.findByIdAndUserId(id, userId);
+    if (!doc || this.cancelled.has(id)) return;
+    const started = Date.now();
+    try {
+      await this.status(id, userId, 'Processing');
       const filePath = await storage.getFileUrl(doc.storageKey);
-
-      // 2. Processing (Reading / Extracting Text)
-      await this.updateStatus(documentId, userId, 'Processing', email);
-      const { text, pagesCount } = await extractor.extractText(filePath, doc.mimeType);
-      
-      // Save raw text to disk for Q&A
-      if (!fs.existsSync(config.processedDir)) {
-        fs.mkdirSync(config.processedDir, { recursive: true });
-      }
-      const textPath = path.join(config.processedDir, `${doc.id}.txt`);
-      await fs.promises.writeFile(textPath, text);
-
-      await docRepo.updateDocument({ id: documentId, pagesCount });
-
-      // 3. Classifying
-      await this.updateStatus(documentId, userId, 'Classifying', email);
-      const { type, confidence } = classifier.classify(text);
-      
-      await docRepo.updateDocument({
-        id: documentId,
-        documentType: type,
-        confidence: confidence * 100
+      const extracted = await new LocalExtractor().extractText(filePath, doc.mimeType);
+      await this.status(id, userId, 'Classifying');
+      const classified = new LocalClassifier().classify(extracted.text);
+      await this.status(id, userId, 'Extracting information');
+      const structured = new StructuredFieldExtractor().extractFields(extracted.text, classified.type, extracted.pages);
+      // Retain the complete original extraction for inspection and later cloud migration.
+      await fs.promises.mkdir(config.processedDir, { recursive: true });
+      await fs.promises.writeFile(path.join(config.processedDir, `${id}.txt`), extracted.text, 'utf8');
+      const sha256 = createHash('sha256').update(await fs.promises.readFile(filePath)).digest('hex');
+      await documents.updateDocument({ id, ...structured, pages: extracted.pages, pagesCount: extracted.pagesCount,
+        documentType: classified.type, confidence: Math.round(classified.confidence * 100), sha256,
+        extractedSummary: structured.extractedFields.length ? structured.extractedFields.slice(0, 3).map(field => `${field.label}: ${field.value}`).join(' · ') : extracted.text.replace(/\s+/g, ' ').slice(0, 250),
+        processingDuration: `${((Date.now() - started) / 1000).toFixed(1)}s`,
       });
-
-      // 4. Extracting information
-      await this.updateStatus(documentId, userId, 'Extracting information', email);
-      const { extractedFields, lineItems } = fieldExtractor.extractFields(text, type);
-
-      // Build a human-readable summary for the table view
-      const summaryParts = extractedFields.slice(0, 3).map(f => `${f.label}: ${f.value}`);
-      const extractedSummary = summaryParts.length > 0 ? summaryParts.join(' · ') : 'No fields extracted';
-
-      await docRepo.updateDocument({
-        id: documentId,
-        extractedFields,
-        lineItems,
-        extractedSummary
-      });
-
-      // 5. Completed
-      const duration = ((Date.now() - startTime) / 1000).toFixed(1) + 's';
-      await this.updateStatus(documentId, userId, 'Completed', email);
-      await docRepo.updateDocument({
-        id: documentId,
-        processingDuration: duration
-      });
-
-      await activityRepo.createEvent({
-        id: uuidv4(),
-        userId,
-        timestamp: new Date().toISOString(),
-        event: 'Document Processed',
-        documentName: doc.originalFileName,
-        documentId: documentId,
-        actor: 'System',
-        status: 'Success',
-        details: `Processing completed in ${duration}. Type: ${type}.`,
-        createdAt: new Date().toISOString()
-      });
-
+      await this.status(id, userId, 'Completed');
     } catch (error: any) {
-      console.error(error);
-      await this.updateStatus(documentId, userId, 'Failed', email, error.message);
+      if (!this.cancelled.has(id)) await this.status(id, userId, 'Failed', error?.message || String(error));
     }
   }
 }
+
+export const documentProcessor = new DocumentProcessor();

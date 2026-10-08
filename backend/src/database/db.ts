@@ -1,20 +1,28 @@
 import sqlite3 from 'sqlite3';
 import { open, Database } from 'sqlite';
 import { config } from '../config/env';
+import fs from 'fs';
+import path from 'path';
 
 let dbInstance: Database | null = null;
+let opening: Promise<Database> | null = null;
 
 export async function getDb(): Promise<Database> {
   if (dbInstance) return dbInstance;
-
-  dbInstance = await open({
+  if (opening) return opening;
+  opening = (async () => {
+  await fs.promises.mkdir(path.dirname(config.dbFile), { recursive: true });
+  const database = await open({
     filename: config.dbFile,
     driver: sqlite3.Database,
   });
 
-  await initializeSchema(dbInstance);
-
-  return dbInstance;
+  await database.exec('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;');
+  await initializeSchema(database);
+  dbInstance = database;
+  return database;
+  })().catch(error => { opening = null; throw error; });
+  return opening;
 }
 
 async function initializeSchema(db: Database) {
@@ -83,4 +91,14 @@ async function initializeSchema(db: Database) {
       FOREIGN KEY(userId) REFERENCES users(id)
     );
   `);
+  const columns = await db.all('PRAGMA table_info(documents)');
+  if (!columns.some(column => column.name === 'pages')) await db.exec('ALTER TABLE documents ADD COLUMN pages TEXT');
+  await db.exec(`CREATE TRIGGER IF NOT EXISTS delete_document_questions BEFORE DELETE ON documents
+    BEGIN DELETE FROM qa_messages WHERE documentId = OLD.id; END;`);
+}
+
+export async function closeDb(): Promise<void> {
+  await dbInstance?.close();
+  dbInstance = null;
+  opening = null;
 }

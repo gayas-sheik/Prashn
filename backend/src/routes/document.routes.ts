@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { 
   getDocuments, 
+  getDocumentMetrics,
   getDocumentById, 
   deleteDocument, 
   uploadSingleDocument, 
@@ -16,6 +17,7 @@ const router = Router();
 router.use(requireAuth);
 
 router.get('/', getDocuments);
+router.get('/metrics', getDocumentMetrics);
 router.get('/:id', getDocumentById);
 router.get('/:id/file', downloadDocumentFile);
 router.delete('/:id', deleteDocument);

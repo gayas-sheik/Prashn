@@ -38,7 +38,7 @@ export const LiveActivityFeed: React.FC = () => {
           <span>Live Cloud Activity</span>
         </div>
       }
-      subtitle="AWS Lambda & Textract real-time feed"
+      subtitle="Live local document processing events"
       headerAction={
         <Link
           to="/activity"

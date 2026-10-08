@@ -3,13 +3,15 @@ import { v4 as uuidv4 } from 'uuid';
 import { DocumentRepository } from '../repositories/document.repository';
 import { ActivityRepository } from '../repositories/activity.repository';
 import { getStorageProvider } from '../storage/storage.factory';
-import { Document, DocumentType, DocumentStatus } from '../types';
-import { DocumentProcessor } from '../processing/processor';
+import { Document } from '../types';
+import { documentProcessor as processor } from '../processing/processor';
+import fs from 'fs';
+import path from 'path';
+import { config } from '../config/env';
 
 const docRepo = new DocumentRepository();
 const activityRepo = new ActivityRepository();
 const storage = getStorageProvider();
-const processor = new DocumentProcessor();
 
 const formatBytes = (bytes: number): string => {
   if (bytes === 0) return '0 Bytes';
@@ -28,6 +30,17 @@ export const getDocuments = async (req: Request, res: Response) => {
     console.error('Error fetching documents:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
+};
+
+export const getDocumentMetrics = async (req: Request, res: Response) => {
+  const docs = await docRepo.findAllByUserId(req.user!.userId);
+  const count = (statuses: string[]) => docs.filter(doc => statuses.includes(doc.status)).length;
+  res.json({ metrics: {
+    total: docs.length, queued: count(['Uploaded', 'Queued']), active: count(['Processing', 'Classifying', 'Extracting information']),
+    completed: count(['Completed']), failed: count(['Failed']), totalBytes: docs.reduce((sum, doc) => sum + doc.fileSize, 0),
+    concurrency: config.processingConcurrency, maxPages: config.maxPages, maxUploadBytes: 10 * 1024 * 1024,
+    storageMode: 'local', ocrEngine: 'Tesseract.js', qaMode: config.qaModel ? 'ollama' : 'extractive',
+  } });
 };
 
 export const getDocumentById = async (req: Request, res: Response) => {
@@ -57,8 +70,10 @@ export const deleteDocument = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Document not found' });
     }
     
+    await processor.cancel(id);
     await storage.deleteFile(doc.storageKey);
     await docRepo.deleteByIdAndUserId(id, userId);
+    await fs.promises.rm(path.join(config.processedDir, `${id}.txt`), { force: true });
     
     // Log activity
     await activityRepo.createEvent({
@@ -93,7 +108,7 @@ export const uploadSingleDocument = async (req: Request, res: Response) => {
     const storageKey = await storage.saveFile(file.path, file.originalname, file.mimetype);
     
     const doc: Document = {
-      id: `DOC-${Math.floor(10000 + Math.random() * 90000)}`, // Simulate DOC-12345 format
+      id: `DOC-${uuidv4()}`,
       userId,
       fileName: file.originalname,
       originalFileName: file.originalname,
@@ -126,7 +141,8 @@ export const uploadSingleDocument = async (req: Request, res: Response) => {
       createdAt: new Date().toISOString()
     });
     
-    processor.triggerPipeline(doc.id, userId);
+    await processor.triggerPipeline(doc.id, userId);
+    doc.status = 'Queued';
     
     res.status(201).json({ document: doc });
   } catch (error) {
@@ -150,7 +166,7 @@ export const uploadMultipleDocuments = async (req: Request, res: Response) => {
       const storageKey = await storage.saveFile(file.path, file.originalname, file.mimetype);
       
       const doc: Document = {
-        id: `DOC-${Math.floor(10000 + Math.random() * 90000)}`,
+        id: `DOC-${uuidv4()}`,
         userId,
         fileName: file.originalname,
         originalFileName: file.originalname,
@@ -183,7 +199,8 @@ export const uploadMultipleDocuments = async (req: Request, res: Response) => {
         createdAt: new Date().toISOString()
       });
       
-      processor.triggerPipeline(doc.id, userId);
+      await processor.triggerPipeline(doc.id, userId);
+      doc.status = 'Queued';
     }
     
     res.status(201).json({ documents: uploadedDocs });
@@ -203,7 +220,7 @@ export const retryDocument = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Document not found' });
     }
     
-    // Allow retrying ANY document to re-run extraction
+    if (!['Failed', 'Completed'].includes(doc.status)) return res.status(409).json({ error: 'Document is already being processed' });
     
     // Log activity
     await activityRepo.createEvent({
@@ -219,7 +236,7 @@ export const retryDocument = async (req: Request, res: Response) => {
       createdAt: new Date().toISOString()
     });
 
-    processor.triggerPipeline(doc.id, userId);
+    await processor.triggerPipeline(doc.id, userId);
     
     res.json({ success: true, message: 'Retry initiated' });
   } catch (error) {
@@ -239,7 +256,10 @@ export const downloadDocumentFile = async (req: Request, res: Response) => {
     }
     
     const filePath = await storage.getFileUrl(doc.storageKey);
-    res.download(filePath, doc.originalFileName || doc.fileName);
+    res.setHeader('Content-Type', doc.mimeType);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.sendFile(path.resolve(filePath), { dotfiles: 'allow' });
   } catch (error) {
     console.error('Error downloading document file:', error);
     res.status(500).json({ error: 'Internal server error' });

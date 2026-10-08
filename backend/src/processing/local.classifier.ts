@@ -4,6 +4,7 @@ import { DocumentType } from '../types';
 export class LocalClassifier implements DocumentClassifier {
   classify(text: string): ClassificationResult {
     const lowerText = text.toLowerCase();
+    const has = (phrase: string) => new RegExp(`\\b${phrase.replace(/ /g, '\\s+')}\\b`).test(lowerText);
     
     let scores = {
       invoice: 0,
@@ -12,26 +13,27 @@ export class LocalClassifier implements DocumentClassifier {
     };
     
     // Invoice indicators
-    if (lowerText.includes('invoice')) scores.invoice += 10;
-    if (lowerText.includes('invoice number')) scores.invoice += 5;
-    if (lowerText.includes('bill to')) scores.invoice += 3;
-    if (lowerText.includes('due date')) scores.invoice += 3;
-    if (lowerText.includes('subtotal')) {
+    if (has('invoice')) scores.invoice += 10;
+    if (has('invoice number')) scores.invoice += 5;
+    if (has('bill to')) scores.invoice += 3;
+    if (has('due date')) scores.invoice += 3;
+    if (has('subtotal')) {
       scores.invoice += 2;
       scores.receipt += 2;
     }
     
     // Receipt indicators
-    if (lowerText.includes('receipt')) scores.receipt += 10;
-    if (lowerText.includes('store')) scores.receipt += 3;
-    if (lowerText.includes('cash')) scores.receipt += 3;
-    if (lowerText.includes('change')) scores.receipt += 3;
+    if (has('receipt')) scores.receipt += 10;
+    if (has('store')) scores.receipt += 3;
+    if (has('cash')) scores.receipt += 3;
+    if (has('change')) scores.receipt += 3;
     
     // Form indicators
-    if (lowerText.includes('name')) scores.form += 2;
-    if (lowerText.includes('address')) scores.form += 2;
-    if (lowerText.includes('signature')) scores.form += 5;
-    if (lowerText.includes('date of birth') || lowerText.includes('dob')) scores.form += 5;
+    if (has('name')) scores.form += 2;
+    if (has('address')) scores.form += 2;
+    if (has('signature')) scores.form += 5;
+    if (has('date of birth') || has('dob')) scores.form += 5;
+    if (/\b(?:agreement|contract)\b/.test(lowerText) && /\b(?:termination|parties|clause|hereby|effective date)\b/.test(lowerText) && scores.invoice < 10) return { type: 'Contract', confidence: 0.85 };
 
     let maxScore = 0;
     let predictedType: DocumentType = 'Unknown';

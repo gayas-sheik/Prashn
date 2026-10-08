@@ -15,6 +15,8 @@ export interface ExtractedField {
   label: string;
   value: string;
   confidence?: number;
+  page?: number;
+  snippet?: string;
   boundingBox?: { x: number; y: number; width: number; height: number };
 }
 
@@ -25,6 +27,15 @@ export interface LineItem {
   quantity: string | number;
   unitPrice: string;
   amount: string;
+  page?: number;
+  snippet?: string;
+}
+
+export interface DocumentPage {
+  page: number;
+  text: string;
+  extractionMethod: 'text' | 'ocr';
+  confidence?: number;
 }
 
 export interface Document {
@@ -46,9 +57,10 @@ export interface Document {
   s3Uri?: string;
   sha256?: string;
   pagesCount: number;
-  failureReason?: string;
+  failureReason?: string | null;
   extractedFields?: ExtractedField[];
   lineItems?: LineItem[];
+  pages?: DocumentPage[];
   createdAt: string;
   updatedAt: string;
 }

@@ -1,74 +1,27 @@
-const API_BASE_URL = 'http://localhost:5000/api';
-
-const TOKEN_KEY = 'prashn_auth_token';
-
-let token = localStorage.getItem(TOKEN_KEY);
-
-export async function getAuthToken(): Promise<string> {
-  if (token) return token;
-
-  // Auto-login or register logic for local development
-  try {
-    const loginRes = await fetch(`${API_BASE_URL}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'test@example.com', password: 'password123' })
-    });
-
-    if (loginRes.ok) {
-      const data = await loginRes.json();
-      token = data.token;
-      localStorage.setItem(TOKEN_KEY, data.token);
-      return data.token;
-    } else if (loginRes.status === 401) {
-      // Register
-      const regRes = await fetch(`${API_BASE_URL}/auth/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: 'test@example.com', password: 'password123', fullName: 'Test User' })
-      });
-      if (regRes.ok) {
-        const loginRetry = await fetch(`${API_BASE_URL}/auth/login`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: 'test@example.com', password: 'password123' })
-        });
-        const data = await loginRetry.json();
-        token = data.token;
-        localStorage.setItem(TOKEN_KEY, data.token);
-        return data.token;
-      }
-    }
-  } catch (error) {
-    console.error('Auth auto-setup failed:', error);
-  }
-  
-  return '';
+export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '');
+export class ApiError extends Error {
+  status: number;
+  constructor(message: string, status: number) { super(message); this.status = status; }
 }
-
-export async function apiClient(endpoint: string, options: RequestInit = {}) {
-  const currentToken = await getAuthToken();
-  
-  const headers: HeadersInit = {
-    ...options.headers,
-  };
-
-  if (currentToken) {
-    (headers as any)['Authorization'] = `Bearer ${currentToken}`;
-  }
-  
-  if (!(options.body instanceof FormData)) {
-    (headers as any)['Content-Type'] = (headers as any)['Content-Type'] || 'application/json';
-  }
-
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-    ...options,
-    headers
-  });
-
+export const getAuthToken = async (): Promise<string> => localStorage.getItem('prashn_auth_token') || '';
+export function setAuthToken(token: string | null): void {
+  if (token) localStorage.setItem('prashn_auth_token', token);
+  else localStorage.removeItem('prashn_auth_token');
+}
+export async function apiResponse(endpoint: string, options: RequestInit = {}): Promise<Response> {
+  const headers = new Headers(options.headers);
+  const token = await getAuthToken();
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  if (options.body && !(options.body instanceof FormData)) headers.set('Content-Type', 'application/json');
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, { ...options, headers });
   if (!response.ok) {
-    throw new Error(`API error: ${response.status} ${response.statusText}`);
+    const body = await response.json().catch(() => ({}));
+    if (response.status === 401 && token && !endpoint.startsWith('/auth/')) {
+      setAuthToken(null);
+      window.dispatchEvent(new Event('prashn-session-expired'));
+    }
+    throw new ApiError(body.error || `Request failed (${response.status})`, response.status);
   }
-
-  return response.json();
+  return response;
 }
+export const apiClient = async (endpoint: string, options: RequestInit = {}) => (await apiResponse(endpoint, options)).json();

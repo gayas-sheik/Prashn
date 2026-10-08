@@ -11,7 +11,7 @@ export class LocalStorageProvider implements StorageProvider {
     }
   }
 
-  async saveFile(tempFilePath: string, originalName: string, mimeType: string): Promise<string> {
+  async saveFile(tempFilePath: string, originalName: string, _mimeType: string): Promise<string> {
     const ext = path.extname(originalName);
     const storageKey = `${uuidv4()}${ext}`;
     const destinationPath = path.join(config.uploadDir, storageKey);

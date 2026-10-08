@@ -4,8 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "nodemon src/server.ts",
+    "test": "npm run build && node --test tests/workflow.test.cjs",
+    "dev": "nodemon --watch src --ext ts --exec \"npm run dev:server\"",
+    "dev:server": "npm run build && node dist/server.js",
     "build": "tsc",
     "start": "node dist/server.js"
   },
@@ -14,6 +15,7 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@tesseract.js-data/eng": "^1.0.0",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.6",
     "dotenv": "^18.0.6",
@@ -21,6 +23,7 @@
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.4.0",
     "pdf-parse": "^2.4.5",
+    "pdfjs-dist": "^5.4.296",
     "sqlite": "^5.1.1",
     "sqlite3": "^6.0.1",
     "tesseract.js": "^7.0.0",

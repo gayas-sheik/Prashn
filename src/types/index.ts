@@ -1,4 +1,4 @@
-export type DocumentType = 'Invoice' | 'Receipt' | 'Form' | 'Contract';
+export type DocumentType = 'Invoice' | 'Receipt' | 'Form' | 'Contract' | 'Unknown';
 
 export type DocumentStatus = 
   | 'Ready'
@@ -15,6 +15,8 @@ export interface ExtractedField {
   label: string;
   value: string;
   confidence?: number;
+  page?: number;
+  snippet?: string;
   boundingBox?: { x: number; y: number; width: number; height: number };
 }
 
@@ -28,6 +30,11 @@ export interface LineItem {
 }
 
 export interface DocumentItem {
+  originalFileName: string;
+  documentType: DocumentType;
+  uploaderName: string;
+  mimeType: string;
+  pages?: { page: number; text: string; extractionMethod: 'text' | 'ocr'; confidence?: number }[];
   id: string;
   name: string;
   type: DocumentType;

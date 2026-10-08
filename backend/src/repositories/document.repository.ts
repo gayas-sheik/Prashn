@@ -1,5 +1,5 @@
 import { getDb } from '../database/db';
-import { Document, DocumentStatus } from '../types';
+import { Document } from '../types';
 
 export class DocumentRepository {
   async createDocument(doc: Document): Promise<void> {
@@ -23,7 +23,8 @@ export class DocumentRepository {
 
   async updateDocument(doc: Partial<Document> & { id: string }): Promise<void> {
     const db = await getDb();
-    const fields = Object.keys(doc).filter(k => k !== 'id');
+    const fields = Object.keys(doc).filter(k => k !== 'id' && (doc as any)[k] !== undefined);
+    if (!fields.length) return;
     const values = fields.map(k => {
       const val = (doc as any)[k];
       if (typeof val === 'object' && val !== null) return JSON.stringify(val);
@@ -62,6 +63,12 @@ export class DocumentRepository {
       ...row,
       extractedFields: row.extractedFields ? JSON.parse(row.extractedFields) : undefined,
       lineItems: row.lineItems ? JSON.parse(row.lineItems) : undefined,
+      pages: row.pages ? JSON.parse(row.pages) : undefined,
     } as Document;
+  }
+
+  async findPending(): Promise<Document[]> {
+    const db = await getDb();
+    return (await db.all("SELECT * FROM documents WHERE status NOT IN ('Completed', 'Failed') ORDER BY createdAt")).map(row => this.mapRowToDocument(row));
   }
 }

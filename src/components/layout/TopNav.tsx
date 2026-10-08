@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   Sun, 
@@ -12,6 +12,8 @@ import {
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { Button } from '../ui/Button';
+import { getActivityEvents } from '../../services/api/documentService';
+import type { ActivityEvent } from '../../types';
 
 interface TopNavProps {
   onOpenMobileMenu: () => void;
@@ -26,6 +28,17 @@ export const TopNav: React.FC<TopNavProps> = ({ onOpenMobileMenu }) => {
   const [themeDropdownOpen, setThemeDropdownOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notifications, setNotifications] = useState<ActivityEvent[]>([]);
+  useEffect(() => {
+    if (!notificationsOpen) return;
+    let disposed = false;
+    const refresh = async () => {
+      try { const events = await getActivityEvents(); if (!disposed) setNotifications(events.slice(0, 3)); }
+      catch { /* The full activity page reports errors. */ }
+    };
+    void refresh(); const timer = setInterval(refresh, 3000);
+    return () => { disposed = true; clearInterval(timer); };
+  }, [notificationsOpen]);
 
   // Generate breadcrumb info
   const pathParts = location.pathname.split('/').filter(Boolean);
@@ -77,7 +90,7 @@ export const TopNav: React.FC<TopNavProps> = ({ onOpenMobileMenu }) => {
         {/* Global OCR Pipeline indicator */}
         <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-[4px] bg-[#F1F5F9] dark:bg-[#162032] border border-[#E2E8F0] dark:border-[#334155] text-[11px] font-mono text-[#475569] dark:text-[#94A3B8]">
           <span className="w-1.5 h-1.5 rounded-full bg-[#059669]" />
-          <span>Textract Pipeline: Ready</span>
+          <span>Local Document Workspace</span>
         </div>
 
         {/* Theme Selector Dropdown */}
@@ -135,26 +148,21 @@ export const TopNav: React.FC<TopNavProps> = ({ onOpenMobileMenu }) => {
             className="relative p-1.5 rounded-[4px] text-[#64748B] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC] hover:bg-[#F1F5F9] dark:hover:bg-[#334155] transition-colors"
           >
             <Bell className="w-4 h-4" />
-            <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-[#1E40AF]" />
+            {notifications.length > 0 && <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-[#1E40AF]" />}
           </button>
 
           {notificationsOpen && (
             <div className="absolute right-0 mt-1.5 w-80 rounded-[4px] bg-white dark:bg-[#1E293B] border border-[#CBD5E1] dark:border-[#475569] shadow-layer2 p-3 text-[12px] z-50">
               <div className="flex items-center justify-between pb-2 border-b border-[#E2E8F0] dark:border-[#334155] mb-2">
                 <span className="font-semibold text-[#0F172A] dark:text-[#F8FAFC]">System Alerts</span>
-                <span className="text-[10px] text-[#64748B]">2 new</span>
+                <span className="text-[10px] text-[#64748B]">Recent activity</span>
               </div>
               <div className="space-y-2">
-                <div className="p-2 rounded-[4px] bg-[#EFF6FF] dark:bg-[#1E3A8A30] border border-[#BFDBFE] dark:border-[#1E40AF]">
-                  <div className="font-medium text-[#1E40AF] dark:text-[#93C5FD]">OCR Batch #4109 Complete</div>
-                  <div className="text-[11px] text-[#475569] dark:text-[#94A3B8] mt-0.5">3 documents classified and indexed in S3 vault.</div>
-                  <div className="text-[10px] text-[#64748B] mt-1 font-mono">4 mins ago</div>
-                </div>
-                <div className="p-2 rounded-[4px] bg-[#FFFBEB] dark:bg-[#78350F30] border border-[#FDE68A] dark:border-[#92400E]">
-                  <div className="font-medium text-[#92400E] dark:text-[#FBBF24]">Low DPI Warning: 1 document</div>
-                  <div className="text-[11px] text-[#475569] dark:text-[#94A3B8] mt-0.5">application_form_claim.pdf requires resolution review.</div>
-                  <div className="text-[10px] text-[#64748B] mt-1 font-mono">1 hr ago</div>
-                </div>
+                {notifications.length ? notifications.map(event => <div key={event.id} className="p-2 rounded-[4px] bg-[#EFF6FF] dark:bg-[#1E3A8A30] border border-[#BFDBFE] dark:border-[#1E40AF]">
+                  <div className="font-medium text-[#1E40AF] dark:text-[#93C5FD]">{event.event}</div>
+                  <div className="text-[11px] text-[#475569] dark:text-[#94A3B8] mt-0.5">{event.documentName}: {event.details}</div>
+                  <div className="text-[10px] text-[#64748B] mt-1 font-mono">{new Date(event.timestamp).toLocaleString()}</div>
+                </div>) : <p className="text-[#64748B]">No recent activity.</p>}
               </div>
               <button
                 onClick={() => { setNotificationsOpen(false); navigate('/activity'); }}
@@ -185,7 +193,7 @@ export const TopNav: React.FC<TopNavProps> = ({ onOpenMobileMenu }) => {
           {userMenuOpen && (
             <div className="absolute right-0 mt-1.5 w-52 rounded-[4px] bg-white dark:bg-[#1E293B] border border-[#CBD5E1] dark:border-[#475569] shadow-layer2 py-1.5 text-[12px] z-50">
               <div className="px-3 py-1.5 border-b border-[#E2E8F0] dark:border-[#334155]">
-                <div className="font-semibold text-[#0F172A] dark:text-[#F8FAFC]">{user?.name || 'Alex Parker'}</div>
+                <div className="font-semibold text-[#0F172A] dark:text-[#F8FAFC]">{user?.name || 'Account'}</div>
                 <div className="text-[11px] text-[#64748B] dark:text-[#94A3B8] truncate">{user?.email || 'alex.parker@enterprise.internal'}</div>
               </div>
               <button

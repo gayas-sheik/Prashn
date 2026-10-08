@@ -10,7 +10,7 @@ interface MetricCardsProps {
 
 export const MetricCards: React.FC<MetricCardsProps> = ({ documents }) => {
   const total = documents.length;
-  const processing = documents.filter(d => ['Queued', 'Processing', 'Classifying', 'Extracting'].includes(d.status)).length;
+  const processing = documents.filter(d => ['Uploaded', 'Queued', 'Processing', 'Classifying', 'Extracting information'].includes(d.status)).length;
   const completed = documents.filter(d => d.status.startsWith('Completed')).length;
   const failed = documents.filter(d => d.status === 'Failed').length;
 

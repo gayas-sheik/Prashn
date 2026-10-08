@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { 
   Search, 
   Download, 
-  Server, 
   Radio, 
   X
 } from 'lucide-react';
@@ -10,6 +9,7 @@ import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import type { ActivityEvent } from '../../types';
+import { PipelineHealthCard } from '../../components/dashboard/PipelineHealthCard';
 import { getActivityEvents } from '../../services/api/documentService';
 
 export const ActivityPage: React.FC = () => {
@@ -34,9 +34,10 @@ export const ActivityPage: React.FC = () => {
       }
     };
     fetchEvents();
+    if (!liveStreamActive) return;
     const interval = setInterval(fetchEvents, 3000);
     return () => clearInterval(interval);
-  }, []);
+  }, [liveStreamActive]);
 
   const filteredEvents = events.filter((e) => {
     const matchesSearch =
@@ -245,8 +246,8 @@ export const ActivityPage: React.FC = () => {
                   className="h-[36px] px-2.5 bg-white dark:bg-[#1E293B] border border-[#CBD5E1] dark:border-[#475569] rounded-[4px] text-[12px] font-medium text-[#334155] dark:text-[#E2E8F0] focus:outline-none"
                 >
                   <option value="All">All Nodes</option>
-                  <option value="worker-lambda">Lambda Worker</option>
-                  <option value="SQS">SQS Batch</option>
+                  <option value="System">Processing Worker</option>
+
                   <option value="Alex Parker">Alex Parker (User)</option>
                 </select>
               </div>
@@ -311,62 +312,7 @@ export const ActivityPage: React.FC = () => {
 
         {/* Right Column (4 cols): Live Pipeline Health & Telemetry Inspector */}
         <div className="lg:col-span-4 space-y-4">
-          <Card
-            title={
-              <div className="flex items-center gap-2">
-                <Server className="w-4 h-4 text-[#1E40AF] dark:text-[#60A5FA]" />
-                <span>Live Pipeline Health</span>
-              </div>
-            }
-            subtitle="Telemetry status & queue depth"
-          >
-            <div className="space-y-4 text-[12px]">
-              <div>
-                <div className="flex justify-between mb-1">
-                  <span className="text-[#64748B]">SQS Queue Depth:</span>
-                  <span className="font-mono font-semibold">4 in flight, 0 delayed</span>
-                </div>
-                <div className="w-full bg-[#E2E8F0] dark:bg-[#334155] h-1.5 rounded-[2px] overflow-hidden">
-                  <div className="bg-[#1E40AF] h-full" style={{ width: '15%' }} />
-                </div>
-              </div>
-
-              <div>
-                <div className="flex justify-between mb-1">
-                  <span className="text-[#64748B]">Worker Concurrency:</span>
-                  <span className="font-mono font-semibold">12 / 30 Lambda instances</span>
-                </div>
-                <div className="w-full bg-[#E2E8F0] dark:bg-[#334155] h-1.5 rounded-[2px] overflow-hidden">
-                  <div className="bg-[#059669] h-full" style={{ width: '40%' }} />
-                </div>
-              </div>
-
-              <div>
-                <div className="flex justify-between mb-1">
-                  <span className="text-[#64748B]">Error Rate (24h):</span>
-                  <span className="font-mono font-semibold text-[#059669]">0.14% (Healthy)</span>
-                </div>
-                <div className="w-full bg-[#E2E8F0] dark:bg-[#334155] h-1.5 rounded-[2px] overflow-hidden">
-                  <div className="bg-[#059669] h-full" style={{ width: '2%' }} />
-                </div>
-              </div>
-
-              <div className="p-2.5 rounded-[4px] bg-[#F8FAFC] dark:bg-[#162032] border border-[#E2E8F0] dark:border-[#2D3F5A] font-mono text-[11px] space-y-1">
-                <div className="flex justify-between text-[#64748B]">
-                  <span>Cluster Region:</span>
-                  <span className="text-[#0F172A] dark:text-[#F8FAFC]">us-east-1 (N. Virginia)</span>
-                </div>
-                <div className="flex justify-between text-[#64748B]">
-                  <span>S3 Ingestion Vault:</span>
-                  <span className="text-[#0F172A] dark:text-[#F8FAFC]">prashn-vault-east1</span>
-                </div>
-                <div className="flex justify-between text-[#64748B]">
-                  <span>KMS Encryption:</span>
-                  <span className="text-[#059669]">AES-256 Enabled</span>
-                </div>
-              </div>
-            </div>
-          </Card>
+          <PipelineHealthCard />
         </div>
       </div>
 

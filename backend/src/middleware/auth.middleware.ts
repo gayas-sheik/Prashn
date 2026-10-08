@@ -17,8 +17,6 @@ export const requireAuth = (req: Request, res: Response, next: NextFunction) => 
 
   if (authHeader && authHeader.startsWith('Bearer ')) {
     token = authHeader.split(' ')[1];
-  } else if (req.query.token && typeof req.query.token === 'string') {
-    token = req.query.token;
   }
 
   if (!token) {
@@ -29,7 +27,7 @@ export const requireAuth = (req: Request, res: Response, next: NextFunction) => 
     const decoded = jwt.verify(token, config.jwtSecret) as UserPayload;
     req.user = decoded;
     next();
-  } catch (error) {
+  } catch {
     return res.status(401).json({ error: 'Unauthorized', message: 'Invalid token' });
   }
 };
