@@ -132,7 +132,7 @@ export const UploadPage: React.FC = () => {
     setUploading(true);
     setOverallProgress(10);
 
-    await uploadDocuments(stagedFiles, (fileId, progress, status) => {
+    const uploadedDocs = await uploadDocuments(stagedFiles, (fileId, progress, status) => {
       setStagedFiles((prev) =>
         prev.map((f) => (f.id === fileId ? { ...f, progress, status, speed: '2.1 MB/s' } : f))
       );
@@ -141,7 +141,13 @@ export const UploadPage: React.FC = () => {
 
     setOverallProgress(100);
     setUploading(false);
-    setUploadSuccess(true);
+    
+    if (uploadedDocs.length > 0) {
+      setUploadSuccess(true);
+    } else {
+      setUploadSuccess(false);
+      alert('Upload failed. Please check your connection and try again.');
+    }
   };
 
   return (

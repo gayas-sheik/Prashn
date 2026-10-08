@@ -21,14 +21,20 @@ export const ProcessingPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   const loadData = async () => {
-    setLoading(true);
-    const docs = await getDocuments();
-    setDocuments(docs);
-    setLoading(false);
+    try {
+      const docs = await getDocuments();
+      setDocuments(docs);
+    } catch (err) {
+      console.error("Failed to load documents", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
     loadData();
+    const interval = setInterval(loadData, 3000);
+    return () => clearInterval(interval);
   }, []);
 
   const handleRetry = async (id: string) => {
@@ -87,41 +93,45 @@ export const ProcessingPage: React.FC = () => {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white dark:bg-[#1E293B] border border-[#E2E8F0] dark:border-[#334155] rounded-[6px] p-4">
           <div className="text-[12px] font-medium text-[#64748B] dark:text-[#94A3B8] mb-1">
-            SQS Queue Depth
+            In Queue / Processing
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-[24px] font-bold text-[#0F172A] dark:text-[#F8FAFC] tabular-nums">
-              4 in-flight
+              {documents.filter(d => ['Queued', 'Processing', 'Classifying', 'Extracting information', 'Uploaded'].includes(d.status)).length}
             </span>
-            <span className="text-[11px] text-[#059669] font-mono">0 delayed</span>
+            <span className="text-[11px] text-[#059669] font-mono">documents</span>
           </div>
-          <div className="text-[11px] text-[#64748B] mt-1">prashn-high-prio & standard</div>
+          <div className="text-[11px] text-[#64748B] mt-1">Active pipeline jobs</div>
         </div>
 
         <div className="bg-white dark:bg-[#1E293B] border border-[#E2E8F0] dark:border-[#334155] rounded-[6px] p-4">
           <div className="text-[12px] font-medium text-[#64748B] dark:text-[#94A3B8] mb-1">
-            Worker Concurrency
+            Completed
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-[24px] font-bold text-[#0F172A] dark:text-[#F8FAFC] tabular-nums">
-              12 / 30 Lambda
+            <span className="text-[24px] font-bold text-[#059669] dark:text-[#34D399] tabular-nums">
+              {documents.filter(d => d.status === 'Completed').length}
             </span>
-            <span className="text-[11px] text-[#0284C7] font-mono">40% capacity</span>
+            <span className="text-[11px] text-[#059669] font-mono">
+              {documents.length > 0 ? `${Math.round((documents.filter(d => d.status === 'Completed').length / documents.length) * 100)}% success` : '0%'}
+            </span>
           </div>
-          <div className="text-[11px] text-[#64748B] mt-1">Automatic scaling enabled</div>
+          <div className="text-[11px] text-[#64748B] mt-1">Indexed & ready for Q&A</div>
         </div>
 
         <div className="bg-white dark:bg-[#1E293B] border border-[#E2E8F0] dark:border-[#334155] rounded-[6px] p-4">
           <div className="text-[12px] font-medium text-[#64748B] dark:text-[#94A3B8] mb-1">
-            Avg Extraction Latency
+            Failed / Errors
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-[24px] font-bold text-[#0F172A] dark:text-[#F8FAFC] tabular-nums">
-              1.84s
+            <span className="text-[24px] font-bold text-[#E11D48] dark:text-[#F87171] tabular-nums">
+              {documents.filter(d => d.status === 'Failed').length}
             </span>
-            <span className="text-[11px] text-[#64748B] font-mono">p99: 3.2s</span>
+            <span className="text-[11px] text-[#64748B] font-mono">
+              {documents.filter(d => d.status === 'Failed').length > 0 ? 'Needs attention' : 'All clear'}
+            </span>
           </div>
-          <div className="text-[11px] text-[#64748B] mt-1">Textract OCR + Schema match</div>
+          <div className="text-[11px] text-[#64748B] mt-1">Check failure reason below</div>
         </div>
       </div>
 
@@ -153,14 +163,14 @@ export const ProcessingPage: React.FC = () => {
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="font-semibold text-[14px] text-[#0F172A] dark:text-[#F8FAFC]">
-                            {doc.name}
+                            {doc.name || doc.originalFileName || 'Untitled Document'}
                           </span>
                           <span className="font-mono text-[11px] text-[#64748B] dark:text-[#94A3B8]">
                             ({doc.id})
                           </span>
                         </div>
                         <div className="flex items-center gap-2 text-[11px] text-[#64748B] dark:text-[#94A3B8] font-mono mt-0.5">
-                          <span>{doc.type}</span>
+                          <span>{doc.documentType || doc.type || 'Unknown'}</span>
                           <span>·</span>
                           <span>{doc.fileSize}</span>
                           <span>·</span>

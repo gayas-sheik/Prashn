@@ -105,16 +105,17 @@ export const DocumentsPage: React.FC = () => {
   // Filtering
   const filteredDocuments = documents.filter((doc) => {
     const matchesSearch =
-      doc.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      doc.extractedSummary.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      doc.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      doc.uploader.toLowerCase().includes(searchQuery.toLowerCase());
+      (doc.name || doc.originalFileName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (doc.id || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (doc.uploaderName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (doc.documentType || doc.type || '').toLowerCase().includes(searchQuery.toLowerCase());
 
     const matchesStatus =
       statusFilter === 'All' ? true : doc.status === statusFilter;
 
+    const docType = doc.documentType || doc.type || 'Unknown';
     const matchesType =
-      typeFilter === 'All' ? true : doc.type === typeFilter;
+      typeFilter === 'All' ? true : docType === typeFilter;
 
     return matchesSearch && matchesStatus && matchesType;
   });
@@ -125,12 +126,17 @@ export const DocumentsPage: React.FC = () => {
     currentPage * pageSize
   );
 
+  const getStatusCount = (status: string) => {
+    if (status === 'All') return documents.length;
+    return documents.filter(d => d.status === status || (status === 'Completed' && d.status.startsWith('Completed'))).length;
+  };
+
   const statusTabs = [
-    { label: 'All (128)', value: 'All' as const },
-    { label: 'Completed (114)', value: 'Completed' as const },
-    { label: 'Processing (6)', value: 'Processing' as const },
-    { label: 'Failed (8)', value: 'Failed' as const },
-    { label: 'Queued (0)', value: 'Queued' as const },
+    { label: `All (${getStatusCount('All')})`, value: 'All' as const },
+    { label: `Completed (${getStatusCount('Completed')})`, value: 'Completed' as const },
+    { label: `Processing (${getStatusCount('Processing')})`, value: 'Processing' as const },
+    { label: `Failed (${getStatusCount('Failed')})`, value: 'Failed' as const },
+    { label: `Queued (${getStatusCount('Queued')})`, value: 'Queued' as const },
   ];
 
   return (

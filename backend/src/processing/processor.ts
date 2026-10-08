@@ -31,7 +31,7 @@ export class DocumentProcessor {
       id: uuidv4(),
       userId,
       timestamp: new Date().toISOString(),
-      event: 'Status Updated',
+      event: status === 'Failed' ? 'Processing Failed' : `Document ${status}`,
       documentName: `Doc ${id}`,
       documentId: id,
       actor: 'System',
@@ -80,10 +80,15 @@ export class DocumentProcessor {
       await this.updateStatus(documentId, userId, 'Extracting information', email);
       const { extractedFields, lineItems } = fieldExtractor.extractFields(text, type);
 
+      // Build a human-readable summary for the table view
+      const summaryParts = extractedFields.slice(0, 3).map(f => `${f.label}: ${f.value}`);
+      const extractedSummary = summaryParts.length > 0 ? summaryParts.join(' · ') : 'No fields extracted';
+
       await docRepo.updateDocument({
         id: documentId,
         extractedFields,
-        lineItems
+        lineItems,
+        extractedSummary
       });
 
       // 5. Completed

@@ -85,7 +85,8 @@ export const DocumentTable: React.FC<DocumentTableProps> = ({
           ) : (
             documents.map((doc) => {
               const isSelected = selectedIds.includes(doc.id);
-              const isPdf = doc.name.toLowerCase().endsWith('.pdf');
+              const docName = doc.name || doc.originalFileName || 'Untitled Document';
+              const isPdf = docName.toLowerCase().endsWith('.pdf');
 
               return (
                 <tr
@@ -115,9 +116,9 @@ export const DocumentTable: React.FC<DocumentTableProps> = ({
                         <button
                           onClick={() => navigate(`/documents/${doc.id}`)}
                           className="font-medium text-[#0F172A] dark:text-[#F8FAFC] hover:text-[#1E40AF] dark:hover:text-[#60A5FA] hover:underline truncate block text-left"
-                          title={doc.name}
+                          title={docName}
                         >
-                          {doc.name}
+                          {docName}
                         </button>
                         <span className="text-[11px] text-[#64748B] dark:text-[#94A3B8] font-mono">
                           {doc.fileSize} · {doc.id}
@@ -129,7 +130,7 @@ export const DocumentTable: React.FC<DocumentTableProps> = ({
                   {/* Classification */}
                   <td className="px-3">
                     <span className="inline-flex px-2 py-0.5 rounded-[2px] bg-[#F1F5F9] dark:bg-[#334155] text-[#334155] dark:text-[#E2E8F0] font-mono text-[11px] font-medium">
-                      {doc.type}
+                      {doc.documentType || doc.type || 'Unknown'}
                     </span>
                   </td>
 
@@ -146,21 +147,21 @@ export const DocumentTable: React.FC<DocumentTableProps> = ({
                       {doc.uploadDate}
                     </div>
                     <div className="text-[10px] text-[#64748B] dark:text-[#94A3B8]">
-                      {doc.uploader}
+                      {doc.uploaderName || doc.uploader || 'System'}
                     </div>
                   </td>
 
                   {/* Processing Duration */}
                   <td className="px-3">
                     <span className="font-mono text-[12px] text-[#64748B] dark:text-[#94A3B8] tabular-nums">
-                      {doc.processingDuration}
+                      {doc.processingDuration || '< 1s'}
                     </span>
                   </td>
 
                   {/* Extracted Summary */}
                   <td className="px-3">
                     <span className="font-medium text-[#334155] dark:text-[#CBD5E1] truncate block max-w-[200px]" title={doc.extractedSummary}>
-                      {doc.extractedSummary}
+                      {doc.extractedSummary || (doc.extractedFields ? `${doc.extractedFields.length} fields extracted` : 'Pending...')}
                     </span>
                   </td>
 

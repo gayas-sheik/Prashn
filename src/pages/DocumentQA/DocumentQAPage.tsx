@@ -19,7 +19,6 @@ import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import type { DocumentItem, QAMessage, QACitation } from '../../types';
 import { getDocument, getConversation, askQuestion, getSuggestedPrompts } from '../../services/api/documentService';
-import { mockCitations } from '../../mock/mockQA';
 
 export const DocumentQAPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -102,7 +101,6 @@ export const DocumentQAPage: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
-  const citations: QACitation[] = (id && mockCitations[id]) || mockCitations['DOC-88492'];
 
   if (!document) {
     return (
@@ -182,65 +180,50 @@ export const DocumentQAPage: React.FC = () => {
             subtitle="Extracted key-values available for citations"
           >
             <div className="space-y-2 text-[12px]">
-              <div className="p-2.5 rounded-[4px] bg-[#F8FAFC] dark:bg-[#162032] border border-[#E2E8F0] dark:border-[#2D3F5A] flex justify-between items-center">
-                <span className="text-[#64748B]">Vendor / Entity:</span>
-                <span className="font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
-                  Amazon Web Services, Inc.
-                </span>
-              </div>
-              <div className="p-2.5 rounded-[4px] bg-[#F8FAFC] dark:bg-[#162032] border border-[#E2E8F0] dark:border-[#2D3F5A] flex justify-between items-center">
-                <span className="text-[#64748B]">Total Amount Payable:</span>
-                <span className="font-mono font-bold text-[#1E40AF] dark:text-[#60A5FA] text-[13px]">
-                  $12,840.50 USD
-                </span>
-              </div>
-              <div className="p-2.5 rounded-[4px] bg-[#F8FAFC] dark:bg-[#162032] border border-[#E2E8F0] dark:border-[#2D3F5A] flex justify-between items-center">
-                <span className="text-[#64748B]">Payment Due Date:</span>
-                <span className="font-mono font-medium text-[#0F172A] dark:text-[#F8FAFC]">
-                  Nov 23, 2026
-                </span>
-              </div>
-              <div className="p-2.5 rounded-[4px] bg-[#F8FAFC] dark:bg-[#162032] border border-[#E2E8F0] dark:border-[#2D3F5A] flex justify-between items-center">
-                <span className="text-[#64748B]">Citation Confidence:</span>
-                <span className="font-mono text-[#059669] font-bold">
-                  99.82% OCR match
-                </span>
-              </div>
+              {document.extractedFields?.slice(0, 4).map((f, i) => (
+                <div key={i} className="p-2.5 rounded-[4px] bg-[#F8FAFC] dark:bg-[#162032] border border-[#E2E8F0] dark:border-[#2D3F5A] flex justify-between items-center">
+                  <span className="text-[#64748B]">{f.label}:</span>
+                  <span className="font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
+                    {f.value}
+                  </span>
+                </div>
+              ))}
+              {(!document.extractedFields || document.extractedFields.length === 0) && (
+                 <div className="p-2.5 rounded-[4px] bg-[#F8FAFC] dark:bg-[#162032] border border-[#E2E8F0] dark:border-[#2D3F5A] flex justify-between items-center">
+                 <span className="text-[#64748B]">No key metrics extracted yet.</span>
+               </div>
+              )}
             </div>
           </Card>
 
-          {/* Card 2: Citation Inspector */}
+          {/* Card 2: Document Image/File Preview */}
           <Card
             title={
               <div className="flex items-center gap-1.5">
                 <Layers className="w-4 h-4 text-[#1E40AF] dark:text-[#60A5FA]" />
-                <span>Cited Document Passages</span>
+                <span>Original Document</span>
               </div>
             }
-            subtitle="Exact snippets verified in this document"
+            subtitle="Original uploaded file"
+            noPadding
           >
-            <div className="space-y-2.5">
-              {citations.map((c, i) => (
-                <div
-                  key={c.id}
-                  className="p-3 rounded-[4px] bg-[#F8FAFC] dark:bg-[#162032] border border-[#E2E8F0] dark:border-[#2D3F5A] text-[12px] space-y-1.5"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="px-1.5 py-0.2 rounded-[2px] bg-[#EFF6FF] dark:bg-[#1E3A8A40] text-[#1E40AF] dark:text-[#93C5FD] font-mono text-[11px] font-semibold">
-                      Citation [{i + 1}]
-                    </span>
-                    <span className="font-mono text-[10px] text-[#64748B]">
-                      Page {c.page} · {c.confidence}% match
-                    </span>
-                  </div>
-                  <div className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] text-[12px]">
-                    {c.section}
-                  </div>
-                  <p className="text-[11px] text-[#475569] dark:text-[#94A3B8] font-mono bg-white dark:bg-[#1E293B] p-2 rounded-[2px] border border-[#E2E8F0] dark:border-[#334155]">
-                    "{c.snippet}"
-                  </p>
-                </div>
-              ))}
+            <div className="w-full bg-[#64748B10] h-[400px] flex items-center justify-center overflow-hidden">
+                {document.mimeType?.startsWith('image/') ? (
+                <img 
+                    src={`http://localhost:5000/api/documents/${document.id}/file?token=${localStorage.getItem('token')}`} 
+                    alt={document.name} 
+                    className="max-w-full max-h-full object-contain" 
+                    onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = 'none';
+                    }}
+                />
+                ) : (
+                <embed 
+                    src={`http://localhost:5000/api/documents/${document.id}/file?token=${localStorage.getItem('token')}`} 
+                    type={document.mimeType} 
+                    className="w-full h-full" 
+                />
+                )}
             </div>
           </Card>
         </div>

@@ -24,5 +24,11 @@ dist-ssr
 *.sw?
 .env
 .env.*
+!.env.example
 backend/database/*.sqlite
 backend/storage/uploads/*
+backend/storage/processed/*
+backend/data/development/*.db
+*.db
+*.sqlite
+*.sqlite3

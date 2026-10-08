@@ -49,7 +49,7 @@ export const DocumentPreviewDrawer: React.FC<DocumentPreviewDrawerProps> = ({
               <div className="flex items-center gap-2 truncate">
                 <FileText className="w-4 h-4 text-[#1E40AF] dark:text-[#60A5FA] flex-shrink-0" />
                 <span className="font-semibold text-[14px] text-[#0F172A] dark:text-[#F8FAFC] truncate">
-                  {document.name}
+                  {document.name || document.originalFileName}
                 </span>
               </div>
               <button
@@ -120,7 +120,7 @@ export const DocumentPreviewDrawer: React.FC<DocumentPreviewDrawerProps> = ({
                   </div>
                   <div className="flex justify-between">
                     <span className="text-[#64748B]">Uploaded By:</span>
-                    <span>{document.uploader}</span>
+                    <span>{document.uploaderName || document.uploader || 'System'}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-[#64748B]">Timestamp:</span>

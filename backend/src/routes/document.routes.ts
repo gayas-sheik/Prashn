@@ -5,7 +5,8 @@ import {
   deleteDocument, 
   uploadSingleDocument, 
   uploadMultipleDocuments,
-  retryDocument
+  retryDocument,
+  downloadDocumentFile
 } from '../controllers/document.controller';
 import { requireAuth } from '../middleware/auth.middleware';
 import { upload } from '../middleware/upload.middleware';
@@ -16,6 +17,7 @@ router.use(requireAuth);
 
 router.get('/', getDocuments);
 router.get('/:id', getDocumentById);
+router.get('/:id/file', downloadDocumentFile);
 router.delete('/:id', deleteDocument);
 router.post('/:id/retry', retryDocument);
 

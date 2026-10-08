@@ -24,12 +24,18 @@ export const ActivityPage: React.FC = () => {
 
   useEffect(() => {
     const fetchEvents = async () => {
-      setLoading(true);
-      const data = await getActivityEvents();
-      setEvents(data);
-      setLoading(false);
+      try {
+        const data = await getActivityEvents();
+        setEvents(data);
+      } catch (err) {
+        console.error("Failed to load events", err);
+      } finally {
+        setLoading(false);
+      }
     };
     fetchEvents();
+    const interval = setInterval(fetchEvents, 3000);
+    return () => clearInterval(interval);
   }, []);
 
   const filteredEvents = events.filter((e) => {
@@ -136,11 +142,11 @@ export const ActivityPage: React.FC = () => {
           </div>
           <div className="flex items-baseline justify-between">
             <span className="text-[26px] font-bold text-[#0F172A] dark:text-[#F8FAFC] tabular-nums">
-              1,429
+              {events.length}
             </span>
-            <span className="text-[11px] text-[#059669] font-medium">+18% vs avg</span>
+            <span className="text-[11px] text-[#059669] font-medium">Real-time</span>
           </div>
-          <div className="text-[11px] text-[#64748B] mt-1 font-mono">Last 24 hours UTC</div>
+          <div className="text-[11px] text-[#64748B] mt-1 font-mono">Total tracked events</div>
         </div>
 
         <div className="bg-white dark:bg-[#1E293B] border border-[#E2E8F0] dark:border-[#334155] rounded-[6px] p-4">
@@ -149,11 +155,11 @@ export const ActivityPage: React.FC = () => {
           </div>
           <div className="flex items-baseline justify-between">
             <span className="text-[26px] font-bold text-[#059669] dark:text-[#34D399] tabular-nums">
-              98.6%
+              {events.length > 0 ? Math.round((events.filter(e => e.status !== 'Failed').length / events.length) * 100) : 0}%
             </span>
             <Badge variant="success">Healthy</Badge>
           </div>
-          <div className="text-[11px] text-[#64748B] mt-1 font-mono">1,409 / 1,429 passed</div>
+          <div className="text-[11px] text-[#64748B] mt-1 font-mono">{events.filter(e => e.status !== 'Failed').length} / {events.length} passed</div>
         </div>
 
         <div className="bg-white dark:bg-[#1E293B] border border-[#E2E8F0] dark:border-[#334155] rounded-[6px] p-4">
@@ -162,11 +168,11 @@ export const ActivityPage: React.FC = () => {
           </div>
           <div className="flex items-baseline justify-between">
             <span className="text-[26px] font-bold text-[#0F172A] dark:text-[#F8FAFC] tabular-nums">
-              1.84s
+              {"< 1s"}
             </span>
-            <span className="text-[11px] text-[#64748B] font-mono">p99: 3.2s</span>
+            <span className="text-[11px] text-[#64748B] font-mono">Local MVP</span>
           </div>
-          <div className="text-[11px] text-[#64748B] mt-1 font-mono">AWS Textract OCR</div>
+          <div className="text-[11px] text-[#64748B] mt-1 font-mono">Node / Express Extractor</div>
         </div>
 
         <div className="bg-white dark:bg-[#1E293B] border border-[#E2E8F0] dark:border-[#334155] rounded-[6px] p-4">
@@ -175,11 +181,13 @@ export const ActivityPage: React.FC = () => {
           </div>
           <div className="flex items-baseline justify-between">
             <span className="text-[26px] font-bold text-[#E11D48] dark:text-[#F87171] tabular-nums">
-              3
+              {events.filter(e => e.status === 'Failed' || e.status === 'Warning').length}
             </span>
-            <Badge variant="error">Needs Review</Badge>
+            <Badge variant={events.filter(e => e.status === 'Failed' || e.status === 'Warning').length > 0 ? 'error' : 'success'}>
+              {events.filter(e => e.status === 'Failed' || e.status === 'Warning').length > 0 ? 'Needs Review' : 'Clean'}
+            </Badge>
           </div>
-          <div className="text-[11px] text-[#64748B] mt-1 font-mono">3 items routed to DLQ</div>
+          <div className="text-[11px] text-[#64748B] mt-1 font-mono">{events.filter(e => e.status === 'Failed' || e.status === 'Warning').length} items routed to DLQ</div>
         </div>
       </div>
 

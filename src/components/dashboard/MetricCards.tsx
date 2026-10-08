@@ -2,48 +2,59 @@ import React from 'react';
 import { Files, Cpu, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { Badge } from '../ui/Badge';
 
-export const MetricCards: React.FC = () => {
+import type { DocumentItem } from '../../types';
+
+interface MetricCardsProps {
+  documents: DocumentItem[];
+}
+
+export const MetricCards: React.FC<MetricCardsProps> = ({ documents }) => {
+  const total = documents.length;
+  const processing = documents.filter(d => ['Queued', 'Processing', 'Classifying', 'Extracting'].includes(d.status)).length;
+  const completed = documents.filter(d => d.status.startsWith('Completed')).length;
+  const failed = documents.filter(d => d.status === 'Failed').length;
+
   const metrics = [
     {
       title: 'Total Documents',
-      value: '128',
-      change: '+14% this month',
-      badge: '+12 today',
+      value: total.toString(),
+      change: 'Lifetime uploads',
+      badge: `${total} active`,
       badgeVariant: 'primary' as const,
       icon: Files,
       accentColor: 'text-[#1E40AF] dark:text-[#60A5FA]',
-      subtext: 'Ingested across active buckets',
+      subtext: 'Ingested across local system',
     },
     {
       title: 'Processing',
-      value: '6',
-      change: 'Avg. 3.2s latency',
-      badge: 'Active in SQS/Textract',
+      value: processing.toString(),
+      change: 'In processing queue',
+      badge: 'Active pipeline',
       badgeVariant: 'info' as const,
       icon: Cpu,
-      pulse: true,
+      pulse: processing > 0,
       accentColor: 'text-[#0284C7] dark:text-[#38BDF8]',
-      subtext: '4 Textract · 2 SQS In-flight',
+      subtext: 'Local execution',
     },
     {
       title: 'Completed',
-      value: '114',
-      change: '94.2% success rate',
+      value: completed.toString(),
+      change: total > 0 ? `${Math.round((completed/total)*100)}% success rate` : '0% success rate',
       badge: 'Extracted & Indexed',
       badgeVariant: 'success' as const,
       icon: CheckCircle2,
       accentColor: 'text-[#059669] dark:text-[#34D399]',
-      subtext: '100% schema validation verified',
+      subtext: 'Ready for queries',
     },
     {
       title: 'Failed',
-      value: '8',
-      change: 'Needs review',
-      badge: '2 exceptions flagged',
-      badgeVariant: 'error' as const,
+      value: failed.toString(),
+      change: failed > 0 ? 'Needs review' : 'No errors',
+      badge: `${failed} exceptions flagged`,
+      badgeVariant: failed > 0 ? 'error' as const : 'success' as const,
       icon: AlertTriangle,
       accentColor: 'text-[#E11D48] dark:text-[#F87171]',
-      subtext: 'Low DPI / Corrupted scan DLQ',
+      subtext: 'Check logs for details',
     },
   ];
 

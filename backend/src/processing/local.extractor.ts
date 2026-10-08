@@ -18,12 +18,26 @@ export class LocalExtractor implements DocumentExtractor {
         text,
         pagesCount: 1
       };
+    } else if (mimeType.startsWith('image/')) {
+      try {
+        const Tesseract = require('tesseract.js');
+        const result = await Tesseract.recognize(filePath, 'eng');
+        return {
+          text: result.data.text,
+          pagesCount: 1
+        };
+      } catch (error) {
+        console.error('Tesseract OCR failed', error);
+        return {
+          text: `OCR Extraction Failed.`,
+          pagesCount: 1
+        };
+      }
     } else {
-      // Mock for images or unsupported files locally
-      // Real AWS Textract would handle images as well.
+      // Mock for unsupported files locally
       console.warn(`LocalExtractor: Mocking text for unsupported mimeType ${mimeType}. Use Textract later.`);
       return {
-        text: `Extracted mock text for ${mimeType}. No actual OCR ran because this is a local MVP without an OCR engine. Invoice Number: INV-999. Total: $500.00. Vendor: ImageCorp.`,
+        text: `Extracted mock text for ${mimeType}. No actual OCR ran.`,
         pagesCount: 1
       };
     }

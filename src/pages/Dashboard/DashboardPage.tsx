@@ -51,20 +51,26 @@ export const DashboardPage: React.FC = () => {
   // Filter documents
   const filteredDocuments = documents.filter((doc) => {
     const matchesSearch = 
-      doc.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      doc.extractedSummary.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      doc.id.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesType = selectedTypeFilter === 'All' || doc.type === selectedTypeFilter;
+      (doc.name || doc.originalFileName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (doc.id || '').toLowerCase().includes(searchQuery.toLowerCase());
+    
+    const docType = doc.documentType || doc.type || 'Unknown';
+    const matchesType = selectedTypeFilter === 'All' || docType === selectedTypeFilter;
     return matchesSearch && matchesType;
   });
 
   const recentDocs = filteredDocuments.slice(0, 5);
 
+  const getCount = (type: string) => {
+    if (type === 'All') return documents.length;
+    return documents.filter(d => (d.documentType || d.type) === type).length;
+  };
+
   const filterTabs = [
-    { label: 'All (128)', value: 'All' as const },
-    { label: 'Invoices (58)', value: 'Invoice' as const },
-    { label: 'Receipts (42)', value: 'Receipt' as const },
-    { label: 'Forms (28)', value: 'Form' as const },
+    { label: `All (${getCount('All')})`, value: 'All' as const },
+    { label: `Invoices (${getCount('Invoice')})`, value: 'Invoice' as const },
+    { label: `Receipts (${getCount('Receipt')})`, value: 'Receipt' as const },
+    { label: `Forms (${getCount('Form')})`, value: 'Form' as const },
   ];
 
   return (
@@ -89,7 +95,7 @@ export const DashboardPage: React.FC = () => {
             onClick={() => {
               const csvContent = "data:text/csv;charset=utf-8," + 
                 "ID,Name,Type,Status,UploadDate,Summary\n" + 
-                documents.map(e => `"${e.id}","${e.name}","${e.type}","${e.status}","${e.uploadDate}","${e.extractedSummary}"`).join("\n");
+                documents.map(e => `"${e.id}","${e.name || e.originalFileName}","${e.documentType || e.type}","${e.status}","${e.uploadDate}","${e.extractedSummary || ''}"`).join("\n");
               const encodedUri = encodeURI(csvContent);
               const link = window.document.createElement("a");
               link.setAttribute("href", encodedUri);
@@ -114,7 +120,7 @@ export const DashboardPage: React.FC = () => {
       </div>
 
       {/* Row 1: 4 Metric Cards */}
-      <MetricCards />
+      <MetricCards documents={documents} />
 
       {/* Row 2: 2-Column Main Content (8 cols left, 4 cols right) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">

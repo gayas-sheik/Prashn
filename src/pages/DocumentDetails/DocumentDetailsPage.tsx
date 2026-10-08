@@ -256,146 +256,33 @@ export const DocumentDetailsPage: React.FC = () => {
                 style={{ transform: `scale(${zoomLevel / 100})`, transformOrigin: 'top center' }}
                 className="w-[595px] min-h-[742px] bg-white text-[#0F172A] shadow-layer2 border border-[#CBD5E1] p-8 relative rounded-[2px] transition-transform select-none"
               >
-                {/* Visual Invoice Watermark / Header */}
-                <div className="flex justify-between items-start border-b-2 border-[#1E40AF] pb-4 mb-6">
-                  <div>
-                    <div className="text-[20px] font-extrabold text-[#1E40AF] tracking-tight">
-                      amazon web services
-                    </div>
-                    <div className="text-[11px] text-[#475569] mt-0.5">
-                      Amazon Web Services, Inc. · 410 Terry Ave N, Seattle, WA 98109
-                    </div>
+                {/* Actual Document Content Preview */}
+                <div className="w-full h-full flex flex-col items-center justify-center relative">
+                  <div className="absolute top-2 right-2 text-xs text-gray-500 z-10 px-2 py-1 bg-white/80 rounded">
+                    {docItem.originalFileName || docItem.name}
                   </div>
-                  <div className="text-right">
-                    <span className="text-[18px] font-bold tracking-tight text-[#0F172A]">
-                      TAX INVOICE
-                    </span>
-                    <div className="text-[11px] font-mono text-[#64748B]">
-                      INV-88492-US
-                    </div>
-                  </div>
-                </div>
-
-                {/* Key-Value Details */}
-                <div className="grid grid-cols-2 gap-6 text-[12px] mb-6">
-                  <div className="space-y-1">
-                    <div className="text-[10px] uppercase font-bold text-[#64748B]">Billed To:</div>
-                    <div className="font-semibold text-[#0F172A]">CloudTech Solutions Ltd.</div>
-                    <div className="text-[#475569]">Attn: Alex Parker (Cloud Systems)</div>
-                    <div className="text-[#475569]">Account ID: 1092-4820-9921</div>
-                  </div>
-                  <div className="space-y-1 text-right">
-                    <div className="text-[10px] uppercase font-bold text-[#64748B]">Billing Summary:</div>
-                    <div>Invoice Date: <span className="font-medium">Oct 24, 2026</span></div>
-                    <div>Billing Period: <span className="font-medium">Oct 1 - Oct 31, 2026</span></div>
-                    <div>Due Date: <span className="font-bold text-[#1E40AF]">Nov 23, 2026</span></div>
+                  {docItem.mimeType?.startsWith('image/') ? (
+                    <img 
+                      src={`http://localhost:5000/api/documents/${docItem.id}/file?token=${localStorage.getItem('token')}`} 
+                      alt={docItem.name} 
+                      className="max-w-full max-h-full object-contain" 
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = 'none';
+                        (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+                      }}
+                    />
+                  ) : (
+                    <embed 
+                      src={`http://localhost:5000/api/documents/${docItem.id}/file?token=${localStorage.getItem('token')}`} 
+                      type={docItem.mimeType} 
+                      className="w-full h-full" 
+                    />
+                  )}
+                  {/* Fallback if image fails to load */}
+                  <div className="hidden text-center text-gray-400 py-10 w-full">
+                     Preview unavailable.<br/>Please download the original file.
                   </div>
                 </div>
-
-                {/* Document Items Table Canvas */}
-                <table className="w-full text-left text-[11px] mb-6 border-collapse">
-                  <thead>
-                    <tr className="bg-[#F8FAFC] border-b border-[#CBD5E1] text-[#475569] font-bold">
-                      <th className="py-2 px-1">Service / Description</th>
-                      <th className="py-2 px-1 text-right">Usage</th>
-                      <th className="py-2 px-1 text-right">Rate</th>
-                      <th className="py-2 px-1 text-right">Amount (USD)</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#E2E8F0]">
-                    <tr>
-                      <td className="py-2 px-1 font-medium">Amazon EC2 (c6i.4xlarge compute)</td>
-                      <td className="py-2 px-1 text-right font-mono">744 Hrs</td>
-                      <td className="py-2 px-1 text-right font-mono">$4.25</td>
-                      <td className="py-2 px-1 text-right font-mono font-semibold">$3,162.00</td>
-                    </tr>
-                    <tr>
-                      <td className="py-2 px-1 font-medium">Amazon RDS PostgreSQL Multi-AZ</td>
-                      <td className="py-2 px-1 text-right font-mono">744 Hrs</td>
-                      <td className="py-2 px-1 text-right font-mono">$2.80</td>
-                      <td className="py-2 px-1 text-right font-mono font-semibold">$2,083.20</td>
-                    </tr>
-                    <tr>
-                      <td className="py-2 px-1 font-medium">Amazon S3 Standard Storage & Ingest</td>
-                      <td className="py-2 px-1 text-right font-mono">48.2 TB</td>
-                      <td className="py-2 px-1 text-right font-mono">$0.023</td>
-                      <td className="py-2 px-1 text-right font-mono font-semibold">$1,108.60</td>
-                    </tr>
-                    <tr>
-                      <td className="py-2 px-1 font-medium">AWS Lambda Ingestion Workers</td>
-                      <td className="py-2 px-1 text-right font-mono">14.2M req</td>
-                      <td className="py-2 px-1 text-right font-mono">$0.000016</td>
-                      <td className="py-2 px-1 text-right font-mono font-semibold">$227.20</td>
-                    </tr>
-                    <tr>
-                      <td className="py-2 px-1 font-medium font-semibold text-[#1E40AF]">
-                        Amazon Textract Document Layout API
-                      </td>
-                      <td className="py-2 px-1 text-right font-mono">128,400 pgs</td>
-                      <td className="py-2 px-1 text-right font-mono">$0.05</td>
-                      <td className="py-2 px-1 text-right font-mono font-bold text-[#1E40AF]">$6,420.00</td>
-                    </tr>
-                  </tbody>
-                </table>
-
-                {/* Total Block */}
-                <div className="border-t-2 border-[#0F172A] pt-3 flex justify-end">
-                  <div className="w-56 space-y-1.5 text-[12px]">
-                    <div className="flex justify-between">
-                      <span className="text-[#64748B]">Subtotal:</span>
-                      <span className="font-mono">$11,684.85</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-[#64748B]">Tax (VAT/GST 9.8%):</span>
-                      <span className="font-mono">$1,155.65</span>
-                    </div>
-                    <div className="flex justify-between text-[14px] font-bold text-[#1E40AF] border-t border-[#CBD5E1] pt-1">
-                      <span>Total Amount:</span>
-                      <span className="font-mono">$12,840.50</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* OCR Bounding Boxes Highlight Overlay */}
-                {showBoundingBoxes && (
-                  <>
-                    <div
-                      className="absolute top-[28px] right-[28px] border-2 border-[#1E40AF] bg-[#1E40AF15] rounded-[2px] pointer-events-none"
-                      style={{ width: '150px', height: '42px' }}
-                    >
-                      <span className="absolute -top-4 right-0 text-[9px] bg-[#1E40AF] text-white px-1 font-mono rounded-[2px]">
-                        INV_ID (99.8%)
-                      </span>
-                    </div>
-
-                    <div
-                      className="absolute top-[28px] left-[28px] border-2 border-[#059669] bg-[#05966915] rounded-[2px] pointer-events-none"
-                      style={{ width: '220px', height: '40px' }}
-                    >
-                      <span className="absolute -top-4 left-0 text-[9px] bg-[#059669] text-white px-1 font-mono rounded-[2px]">
-                        VENDOR (99.9%)
-                      </span>
-                    </div>
-
-                    <div
-                      className="absolute top-[345px] left-[28px] border-2 border-[#0284C7] bg-[#0284C715] rounded-[2px] pointer-events-none"
-                      style={{ width: '539px', height: '32px' }}
-                    >
-                      <span className="absolute -top-4 left-0 text-[9px] bg-[#0284C7] text-white px-1 font-mono rounded-[2px]">
-                        PRIMARY_LINE_ITEM (99.7%)
-                      </span>
-                    </div>
-
-                    <div
-                      className="absolute top-[430px] right-[28px] border-2 border-[#E11D48] bg-[#E11D4815] rounded-[2px] pointer-events-none"
-                      style={{ width: '235px', height: '80px' }}
-                    >
-                      <span className="absolute -top-4 right-0 text-[9px] bg-[#E11D48] text-white px-1 font-mono rounded-[2px]">
-                        TOTAL_DUE (99.9%)
-                      </span>
-                    </div>
-                  </>
-                )}
               </div>
             </div>
           </Card>

@@ -203,9 +203,7 @@ export const retryDocument = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Document not found' });
     }
     
-    if (doc.status !== 'Failed') {
-      return res.status(400).json({ error: 'Only failed documents can be retried' });
-    }
+    // Allow retrying ANY document to re-run extraction
     
     // Log activity
     await activityRepo.createEvent({
@@ -226,6 +224,24 @@ export const retryDocument = async (req: Request, res: Response) => {
     res.json({ success: true, message: 'Retry initiated' });
   } catch (error) {
     console.error('Error retrying document:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const downloadDocumentFile = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const id = req.params.id as string;
+    
+    const doc = await docRepo.findByIdAndUserId(id, userId);
+    if (!doc) {
+      return res.status(404).json({ error: 'Document not found' });
+    }
+    
+    const filePath = await storage.getFileUrl(doc.storageKey);
+    res.download(filePath, doc.originalFileName || doc.fileName);
+  } catch (error) {
+    console.error('Error downloading document file:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
