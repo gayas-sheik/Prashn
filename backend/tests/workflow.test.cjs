@@ -119,6 +119,10 @@ test('API upload, processing, auth isolation, original bytes, Q&A, retry and del
   const app = require('../dist/app').default;
   server = await new Promise(resolve => { const instance = app.listen(0, '127.0.0.1', () => resolve(instance)); });
   base = `http://127.0.0.1:${server.address().port}/api`;
+  const health = await (await fetch(base + '/health')).json();
+  assert.equal(health.workspace, path.basename(path.resolve(__dirname, '../..')));
+  assert.equal(health.extractionVersion, 'layout-fields-v2');
+  assert.equal(health.qaMode, 'extractive');
   const request = async (endpoint, options = {}, auth = token) => {
     const headers = { ...(auth ? { Authorization: `Bearer ${auth}` } : {}), ...options.headers };
     return fetch(base + endpoint, { ...options, headers });
@@ -316,6 +320,78 @@ test('column fields preserve payment, addresses, GST identifiers and distinct pa
 test('classification uses complete words rather than incidental substrings', () => {
   const classifier = new (require('../dist/processing/local.classifier').LocalClassifier)();
   for (const [text, type] of [['INVOICE\nBill To: Example', 'Invoice'], ['RECEIPT\nCash', 'Receipt'], ['Full Name\nSignature\nDate of Birth', 'Form'], ['Service Agreement\nParties and termination clause', 'Contract'], ['Username: example\nExchange restoration cashmere', 'Unknown']]) assert.equal(classifier.classify(text).type, type);
+});
+
+test('all invoice fields survive varying page counts, layouts and repeated values', async () => {
+  for (const count of [1, 2, 4, 7]) {
+    const fixture = Array.from({ length: count }, (_, index) => ({ valuesFirst: index % 2 === 0, rows: ['INVOICE', ['Invoice No.', `MULTI-${index + 1}`], ['Vendor', `Seller ${index + 1}`], ['Invoice Date', '2026-10-09'], ['Due Date', '2026-11-09'], ['Tax', 'USD 2.00'], ['Total', 'USD 20.00']] }));
+    const file = path.join(run, `multi-${count}.pdf`);
+    await fs.writeFile(file, pdf(fixture));
+    const result = await extractor.extractText(file, 'application/pdf');
+    const doc = { originalFileName: 'multiple.pdf', documentType: 'Invoice', pages: result.pages, pagesCount: count, ...structured.extractFields(result.text, 'Invoice', result.pages) };
+    for (const label of ['Invoice Number', 'Vendor / Seller', 'Invoice Date', 'Due Date', 'Tax', 'Total']) assert.equal(doc.extractedFields.filter(field => field.label === label).length, count, `${count}: ${label}`);
+    for (const question of ['what is the invoice', 'What is the invoice number?', 'Show all invoices', 'Whatt is the date', 'What are the invoice dates?', 'What is the amount?', 'What is the tax amount?', 'When is the due date?']) {
+      const answer = await answerer.answer(question, doc);
+      assert.notEqual(answer.text, require('../dist/processing/document.answerer').NOT_FOUND, question);
+      assert.equal(answer.citations.length, count, `${count}: ${question}`);
+      assert.deepEqual(answer.citations.map(source => source.page).sort((a,b) => a-b), Array.from({length:count}, (_,i)=>i+1));
+    }
+    const scoped = await answerer.answer(`What is the date on page ${count}?`, doc);
+    assert.equal(scoped.citations.length, 1); assert.equal(scoped.citations[0].page, count);
+    assert.equal((await answerer.answer(`What is the date on page: ${count}?`, doc)).citations[0].page, count);
+    assert.match((await answerer.answer('How many invoices are there?', doc)).text, new RegExp(`\\*\\*${count} distinct invoice`));
+    assert.equal((await answerer.answer('What is the date on page 99?', doc)).text, require('../dist/processing/document.answerer').NOT_FOUND);
+  }
+});
+
+test('repeated receipt, form and generic fields retain page provenance', async () => {
+  for (const [type, text, label, question] of [
+    ['Receipt', 'RECEIPT\nReceipt No.\nR-100\nDate\n2026-10-09\nTotal\nEUR 10.00', 'Receipt Number', 'What is the receipt?'],
+    ['Form', 'Full Name: Example Person\nDate: 2026-10-09\nDate of Birth: 2000-01-01', 'Name', 'What is the name?'],
+    ['Unknown', 'Reference: EXAMPLE\nDate: 2026-10-09\nDepartment: Accounts', 'Department', 'What is the department?'],
+  ]) {
+    const pages = Array.from({length:3}, (_,i) => ({page:i+1, extractionMethod:'text', text}));
+    const doc = {originalFileName:'repeated.pdf', documentType:type, pages, pagesCount:3, ...structured.extractFields(text, type, pages)};
+    assert.equal(doc.extractedFields.filter(field => field.label === label).length, 3, type);
+    assert.equal((await answerer.answer(question, doc)).citations.length, 3, type);
+    assert.equal((await answerer.answer('Whatt is the date', doc)).citations.length, 3, type);
+  }
+  const text = 'INVOICE\nInvoice Number: SAME-PAGE-1\nTotal: USD 10.00\nINVOICE\nInvoice Number: SAME-PAGE-2\nTotal: USD 20.00';
+  const pages = [{page:1, text, extractionMethod:'text'}];
+  const doc = {originalFileName:'same-page.pdf', documentType:'Invoice', pages, pagesCount:1, ...structured.extractFields(text, 'Invoice', pages)};
+  assert.equal(doc.extractedFields.filter(field => field.label === 'Invoice Number').length, 2);
+  assert.equal((await answerer.answer('What is the total?', doc)).citations.length, 2);
+});
+
+test('API persists and answers every invoice page and retains results after retry', async () => {
+  const request = (endpoint, options = {}) => fetch(base + endpoint, { ...options, headers: { Authorization: `Bearer ${token}`, ...options.headers } });
+  const payload = pdf(Array.from({length:5}, (_,i) => ({rows:['INVOICE', `Invoice Number: API-${i+1}`, 'Date: 2026-10-09', `Total: USD ${(i+1)*10}.00`]})));
+  const body = new FormData(); body.append('file', new Blob([payload], {type:'application/pdf'}), 'multiple-invoices.pdf');
+  const upload = await request('/documents/upload', {method:'POST', body});
+  assert.equal(upload.status, 201); const id = (await upload.json()).document.id;
+  const wait = async () => {
+    for (let attempt=0; attempt<100; attempt++) {
+      const doc = (await (await request(`/documents/${id}`)).json()).document;
+      if (doc.status === 'Completed') return doc;
+      assert.notEqual(doc.status, 'Failed', doc.failureReason);
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    throw new Error('Processing timed out');
+  };
+  try {
+    for (let pass=0; pass<2; pass++) {
+      const doc = await wait(); assert.equal(doc.pages.length, 5);
+      assert.equal(doc.extractedFields.filter(field=>field.label==='Invoice Number').length, 5);
+      for (const question of ['what is the invoice', 'Whatt is the date', 'What are the totals?']) {
+        const result = await request(`/documents/${id}/questions`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({question})});
+        assert.equal(result.status, 201); const answer = (await result.json()).message;
+        assert.deepEqual(answer.citations.map(source => source.page).sort(), [1,2,3,4,5]);
+      }
+      if (pass===0) assert.equal((await request(`/documents/${id}/retry`, {method:'POST'})).status, 200);
+    }
+    assert.equal((await (await request(`/documents/${id}/questions`)).json()).conversation.length, 12);
+    assert.deepEqual(Buffer.from(await (await request(`/documents/${id}/file`)).arrayBuffer()), payload);
+  } finally { assert.equal((await request(`/documents/${id}`, {method:'DELETE'})).status, 200); }
 });
 
 test('optional model provider refuses ungrounded or invalid citations', async () => {

@@ -19,13 +19,15 @@ export class StructuredFieldExtractor {
     };
     const rows = (pages || [{ page: 1, text, extractionMethod: 'text' as const }]).flatMap(page => page.text.split('\n').map(line => ({ page: page.page, line: line.trim() })).filter(row => row.line));
     const add = (label: string, value: string, row: typeof rows[number], confidence = 0.9) => {
-      if (value.trim() && !fields.some(field => field.label.toLowerCase() === label.toLowerCase() && field.value === value.trim())) fields.push({ label, value: value.trim(), page: row.page, snippet: row.line, confidence });
+      if (value.trim() && !fields.some(field => field.page === row.page && field.label.toLowerCase() === label.toLowerCase() && field.value === value.trim())) fields.push({ label, value: value.trim(), page: row.page, snippet: row.line, confidence });
     };
     const labeled = (label: string, aliases: string[]) => {
       for (const alias of aliases) canonical.set(alias.toLowerCase(), label);
       const pattern = new RegExp(`^(?:${[...aliases].sort((a, b) => b.length - a.length).map(escape).join('|')})(?:[ \\t]*[:#][ \\t]*|[ \\t]+|$)(.*)$`, 'i');
       for (let index = 0; index < rows.length; index++) {
         const row = rows[index];
+        const explicitLabel = row.line.match(/^([^:\t]+)[:\t]/)?.[1].trim();
+        if (explicitLabel && !aliases.some(alias => alias.toLowerCase() === explicitLabel.toLowerCase())) continue;
         const match = row.line.match(pattern);
         if (!match) continue;
         const next = rows[index + 1];
@@ -47,7 +49,6 @@ export class StructuredFieldExtractor {
           }
         }
         add(label, value, { ...row, line: snippet });
-        break;
       }
     };
     // Explicit fields can appear in every document type, including unknown documents.
@@ -63,10 +64,10 @@ export class StructuredFieldExtractor {
       ['GST Number', ['GST Number', 'GSTIN', 'GST Registration Number']],
     ];
     common.forEach(([label, aliases]) => labeled(label, aliases));
+    if (type !== 'Invoice' && type !== 'Receipt') labeled('Date', ['Date', 'Issue Date', 'Date Issued']);
     if (type === 'Invoice' || type === 'Receipt') {
       labeled(type === 'Invoice' ? 'Invoice Number' : 'Receipt Number', [`${type} Number`, `${type} No.`, `${type} No`, `${type} #`, `${type} ID`]);
-      const bare = rows.find(row => new RegExp(`^${type}\\s*[:#]\\s*\\S+`, 'i').test(row.line));
-      if (bare) add(`${type} Number`, bare.line.replace(new RegExp(`^${type}\\s*[:#]\\s*`, 'i'), ''), bare);
+      for (const bare of rows.filter(row => new RegExp(`^${type}\\s*[:#]\\s*\\S+`, 'i').test(row.line))) add(`${type} Number`, bare.line.replace(new RegExp(`^${type}\\s*[:#]\\s*`, 'i'), ''), bare);
       labeled(type === 'Invoice' ? 'Invoice Date' : 'Date', ['Invoice Date', 'Receipt Date', 'Date Issued', 'Issue Date', 'Date']);
       labeled('Due Date', ['Due Date', 'Payment Due', 'Pay by']);
       const amounts: [string, string[]][] = [
@@ -80,7 +81,6 @@ export class StructuredFieldExtractor {
         // Alias order deliberately prioritizes final payable/grand total over plain total.
         for (const alias of aliases) {
           const pattern = new RegExp(`^${escape(alias)}(?:[ \\t]*\\([^)]*\\))?(?:[ \\t]*[:=][ \\t]*|[ \\t]+|$)(.*)$`, 'i');
-          let found = false;
           for (let index = 0; index < rows.length; index++) {
             const row = rows[index];
             const match = row.line.match(pattern);
@@ -90,8 +90,7 @@ export class StructuredFieldExtractor {
             const value = rate ? rate[2] : raw;
             if (label === 'Tax' && /^\d+(?:\.\d+)?\s*%$/.test(raw)) {
               add('Tax Rate', raw, { ...row, line: match[1].trim() ? row.line : `${row.line}\n${raw}` });
-              found = true;
-              break;
+              continue;
             }
             if (!AMOUNT.test(value)) continue;
             const source = { ...row, line: match[1].trim() ? row.line : `${row.line}\n${raw}` };
@@ -99,15 +98,12 @@ export class StructuredFieldExtractor {
             if (rate && label === 'Tax') add('Tax Rate', rate[1], source);
             const printedRate = row.line.match(/\((\d+(?:\.\d+)?\s*%)\)/);
             if (printedRate && label === 'Tax') add('Tax Rate', printedRate[1], source);
-            found = true;
-            break;
           }
-          if (found) break;
         }
       }
       // Two-column FROM / TO blocks: retain the actual values without guessing OCR repairs.
-      const blockIndex = rows.findIndex(row => /^(?:from|vendor|seller)\s*\t+\s*(?:to|bill to|buyer|customer)\s*$/i.test(row.line));
-      if (blockIndex >= 0 && rows[blockIndex + 1]?.page === rows[blockIndex].page) {
+      for (let blockIndex = 0; blockIndex < rows.length; blockIndex++) {
+        if (!/^(?:from|vendor|seller)\s*\t+\s*(?:to|bill to|buyer|customer)\s*$/i.test(rows[blockIndex].line) || rows[blockIndex + 1]?.page !== rows[blockIndex].page) continue;
         const values = rows[blockIndex + 1].line.split(/\t+/);
         if (values.length === 2) {
           partyRows.add(blockIndex + 1);
@@ -154,7 +150,7 @@ export class StructuredFieldExtractor {
       if (partyRows.has(index)) continue;
       const row = rows[index];
       const cells = row.line.split(/\t+/).map(cell => cell.trim());
-      if (cells.length === 2 && /^[\p{L}][\p{L}\p{N} ()/#.%&-]{1,60}$/u.test(cells[0]) && validValue(canonical.get(cells[0].toLowerCase()) || cells[0], cells[1]) && !fields.some(field => field.snippet === row.line)) {
+      if (cells.length === 2 && /^[\p{L}][\p{L}\p{N} ()/#.%&-]{1,60}$/u.test(cells[0]) && validValue(canonical.get(cells[0].toLowerCase()) || cells[0], cells[1]) && !fields.some(field => field.page === row.page && field.snippet === row.line)) {
         let label = canonical.get(cells[0].toLowerCase()) || cells[0];
         if (['Total', 'Subtotal', 'Tax', 'Discount', 'Amount Paid'].includes(label) && !AMOUNT.test(cells[1])) {
           if (/^gst$/i.test(cells[0]) && /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z0-9]{10,20}$/.test(cells[1])) label = 'GST Number';
@@ -173,7 +169,10 @@ export class StructuredFieldExtractor {
       }
       for (const part of row.line.split(/\t+(?=[^:\t]{1,50}:)/)) {
         const match = part.match(/^([\p{L}][\p{L}\p{N} ()/#.-]{1,50}):[ \t]*(\S.*)$/u);
-        if (match && !fields.some(field => field.snippet === row.line)) add(match[1].trim(), match[2], row, 0.8);
+        if (match) {
+          const label = canonical.get(match[1].trim().toLowerCase()) || match[1].trim();
+          if (validValue(label, match[2]) && (!['Total', 'Subtotal', 'Tax', 'Discount', 'Amount Paid'].includes(label) || AMOUNT.test(match[2]))) add(label, match[2], row, 0.8);
+        }
       }
     }
     return { extractedFields: fields, lineItems: items };

@@ -4,7 +4,7 @@
 **Status date:** 9 October 2026  
 **Current scope:** Local application; custom model training and cloud deployment are deferred.  
 **Repository:** https://github.com/gayas-sheik/Prashn  
-**Working checkout:** `Prashn-latest`, based on upstream commit `a15b25b`, with uncommitted local repairs.
+**Working checkout:** `Prashn-latest`; application repairs build on upstream commit `a15b25b`.
 
 ## 1. Abstract
 
@@ -31,7 +31,7 @@ The objectives are to:
 | Area | Current behavior | Practical limit |
 | --- | --- | --- |
 | Accounts | Registration, login, JWT session restoration and logout | No password reset, MFA or token revocation workflow |
-| Upload | PDF, PNG and JPEG; single and batch API uploads | 10 MiB per file; batch API maximum 20 files |
+| Upload | PDF, PNG and JPEG; single and batch API uploads; automatic result tracking | 10 MiB per file; UI and batch API maximum 20 files |
 | Processing | Bounded background queue, status reporting, retry and startup recovery | Queue operates within one backend process |
 | Extraction | Native PDF reading order reconstruction; real English OCR for images/scanned pages | Unfamiliar layouts, low quality scans and handwriting need review |
 | Classification | Invoice, Receipt, Form, Contract or Unknown | Keyword heuristics, not a trained classifier |
@@ -163,6 +163,8 @@ npm run dev
 
 Open the URL printed by Vite, normally `http://localhost:5173`. Default backend health is `http://localhost:5000/api/health`. Register an account, log in, upload a document, wait for completion, inspect Full Text and extracted fields, then ask a question. `Ctrl+C` stops a terminal's server.
 
+After a single-file upload, the upload screen tracks the actual processing status and automatically opens that document's results when it completes. For multiple files, completed fields, recognized line items and text previews appear directly on the upload screen. Each result also provides Full Results and Ask Questions actions. Processing failures remain visible with a retry action; upload success does not imply processing success. Polling requests are cancelled when leaving the page.
+
 For a compiled backend, use `npm run build` then `npm start`. This server must be restarted after rebuilding. Frontend `npm run build` writes `dist/`; `npm run preview` serves a local build preview, not a production hosting configuration.
 
 If testing on alternate ports, set `PORT` for the backend and `PRASHN_API_TARGET` for Vite. A session preview used frontend 5174 and backend 5050; these are not the application's default ports.
@@ -228,7 +230,7 @@ The current local app is not a completed production security implementation. JWT
 
 ## 13. Validation and known issues
 
-The latest completed run passed **15 backend regression tests**. Frontend production build and lint also passed; lint reports React advisory warnings. Coverage includes digital/mixed/scanned PDFs, PNG/JPEG OCR, rotated scans, currency preservation, source citations, field disambiguation, generic columns, multiline addresses, classification boundaries, authentication isolation, upload limits, retry, deletion and recovery. One optional-provider contract test uses mocked responses; it installs or calls no model.
+The latest completed run passed **18 backend regression tests**. Frontend production build and lint also passed; lint reports React advisory warnings. Coverage includes digital/mixed/scanned PDFs, PNG/JPEG OCR, rotated scans, currency preservation, source citations, field disambiguation, generic columns, multiline addresses, classification boundaries, authentication isolation, upload limits, retry, deletion and recovery. Additional cases cover varying page counts, repeated invoice/receipt/form/generic fields and persisted multi-invoice answers before and after reprocessing. One optional-provider contract test uses mocked responses; it installs or calls no model.
 
 Run from the backend:
 
@@ -246,6 +248,8 @@ npm run lint
 Fixtures and test databases are generated under `backend/.test-output/`. A separate HTTP smoke test exercised the frontend proxy and backend workflow. Browser visual and interactive QA was unavailable because no browser surface was connected. Passing these checks does not prove perfect extraction for arbitrary documents.
 
 A reported invoice defect involved PDF values appearing before labels in drawing order. Reading-order reconstruction and ordinary cost/date matching were corrected. The previously uploaded invoice was reprocessed in an earlier pass. Later column-field enhancements passed generated regression cases but were not reapplied to that stored invoice before development was paused. The static backend session may still run the earlier build until restarted; existing records require Reprocess to use newer extraction behavior. Original files and chat history were preserved.
+
+A subsequent screenshot revealed a runtime mismatch: Vite served `Prashn-latest`, while port 5000 ran the older sibling `Prashn` backend. That verified older backend was stopped and the latest compiled backend started. A SQLite backup was retained under the ignored test-output directory. Local environment paths now retain the original database and file storage, and the screenshot's document was reprocessed successfully. Its invoice number, date and total were checked against the corrected extraction; original bytes and conversation history remained intact. Runtime health now reports the workspace name and extraction version to help identify a stale backend.
 
 See [the detailed validation report](local-mvp-test-report.md) and [the proposed AWS architecture](aws-architecture.md).
 

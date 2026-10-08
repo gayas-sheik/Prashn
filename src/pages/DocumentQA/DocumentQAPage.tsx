@@ -56,7 +56,8 @@ export const DocumentQAPage: React.FC = () => {
   }, [id]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const thread = messagesEndRef.current?.parentElement;
+    thread?.scrollTo({ top: thread.scrollHeight, behavior: 'smooth' });
   }, [messages, sending]);
 
   const handleSend = async (questionText?: string) => {
@@ -186,7 +187,7 @@ export const DocumentQAPage: React.FC = () => {
       {/* Split Workspace Layout (40% Left Citation Reference, 60% Right Chat) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
         {/* Left Column (5 cols ~ 40%): Document Reference & Cited Sources */}
-        <div className="lg:col-span-5 space-y-4">
+        <div className="lg:col-span-5 min-w-0 space-y-4">
           {/* Card 1: Pinned Key Extraction Metrics */}
           <Card
             title={
@@ -197,11 +198,11 @@ export const DocumentQAPage: React.FC = () => {
             }
             subtitle="Extracted key-values available for citations"
           >
-            <div className="space-y-2 text-[12px] max-h-[360px] overflow-y-auto">
+            <div className="space-y-2 text-[12px] max-h-[360px] overflow-y-auto overscroll-contain pr-1">
               {document.extractedFields?.map((f, i) => (
-                <div key={i} className="p-2.5 rounded-[4px] bg-[#F8FAFC] dark:bg-[#162032] border border-[#E2E8F0] dark:border-[#2D3F5A] flex justify-between items-center">
+                <div key={i} className="p-2.5 rounded-[4px] bg-[#F8FAFC] dark:bg-[#162032] border border-[#E2E8F0] dark:border-[#2D3F5A] flex justify-between items-start gap-3">
                   <span className="text-[#64748B]">{f.label}{f.page ? ` · Page ${f.page}` : ''}:</span>
-                  <span className="font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
+                  <span className="min-w-0 whitespace-pre-wrap break-words text-right font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
                     {f.value}
                   </span>
                 </div>
@@ -238,8 +239,8 @@ export const DocumentQAPage: React.FC = () => {
         </div>
 
         {/* Right Column (7 cols ~ 60%): Enterprise Document Q&A Chat */}
-        <div className="lg:col-span-7">
-          <Card noPadding className="flex flex-col h-[700px]">
+        <div className="lg:col-span-7 min-w-0">
+          <Card noPadding className="h-[700px]" contentClassName="flex flex-col h-full min-h-0">
             {/* Chat Header Actions */}
             <div className="p-3 border-b border-[#E2E8F0] dark:border-[#334155] bg-white dark:bg-[#1E293B] flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -275,7 +276,7 @@ export const DocumentQAPage: React.FC = () => {
             </div>
 
             {/* Suggested Prompts Bar */}
-            <div className="p-2.5 border-b border-[#E2E8F0] dark:border-[#334155] bg-[#F8FAFC] dark:bg-[#162032] flex items-center gap-1.5 overflow-x-auto text-[11px]">
+            <div className="shrink-0 p-2.5 border-b border-[#E2E8F0] dark:border-[#334155] bg-[#F8FAFC] dark:bg-[#162032] flex items-center gap-1.5 overflow-x-auto text-[11px]">
               <span className="text-[#64748B] dark:text-[#94A3B8] flex items-center gap-1 font-medium whitespace-nowrap pl-1">
                 <Sparkles className="w-3.5 h-3.5 text-[#1E40AF]" />
                 Suggested:
@@ -293,7 +294,7 @@ export const DocumentQAPage: React.FC = () => {
             </div>
 
             {/* Messages Thread Container */}
-            <div className="flex-1 p-4 overflow-y-auto space-y-4 bg-[#F8FAFC20] dark:bg-[#121B2B]">
+            <div className="flex-1 min-h-0 p-4 overflow-y-auto overscroll-contain space-y-4 bg-[#F8FAFC20] dark:bg-[#121B2B]">
               {messages.length === 0 ? (
                 <div className="text-center py-16 text-[#64748B] dark:text-[#94A3B8]">
                   <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-30" />
@@ -327,7 +328,7 @@ export const DocumentQAPage: React.FC = () => {
                       >
                         {/* Message content is escaped by React. */}
                         <div
-                          className="prose prose-sm dark:prose-invert max-w-none"
+                          className="prose prose-sm dark:prose-invert max-w-none break-words"
                         ><MessageText text={msg.text} /></div>
 
                         {/* Citation tag if attached */}
@@ -392,7 +393,7 @@ export const DocumentQAPage: React.FC = () => {
                   onChange={(e) => setInputValue(e.target.value)}
                   onKeyDown={handleKeyDown}
                   disabled={sending || document.status !== 'Completed'}
-                  className="flex-1 h-[40px] px-3.5 text-[13px] rounded-[4px] bg-[#F8FAFC] dark:bg-[#162032] border border-[#CBD5E1] dark:border-[#475569] text-[#0F172A] dark:text-[#F8FAFC] placeholder-[#94A3B8] focus:outline-none focus:ring-1 focus:ring-[#1E40AF]"
+                  className="flex-1 min-w-0 h-[40px] px-3.5 text-[13px] rounded-[4px] bg-[#F8FAFC] dark:bg-[#162032] border border-[#CBD5E1] dark:border-[#475569] text-[#0F172A] dark:text-[#F8FAFC] placeholder-[#94A3B8] focus:outline-none focus:ring-1 focus:ring-[#1E40AF]"
                 />
 
                 <Button

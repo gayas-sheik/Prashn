@@ -7,6 +7,7 @@ import documentRoutes from './routes/document.routes';
 import activityRoutes from './routes/activity.routes';
 import questionRoutes from './routes/question.routes';
 import multer from 'multer';
+import path from 'path';
 
 const app = express();
 
@@ -16,7 +17,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // Health check
 app.get('/api/health', (req, res) => {
-  res.status(200).json({ status: 'ok', environment: config.nodeEnv, processingMode: 'local', qaMode: config.qaModel ? 'ollama' : 'extractive' });
+  res.status(200).json({ status: 'ok', environment: config.nodeEnv, processingMode: 'local', qaMode: config.qaModel ? 'ollama' : 'extractive', workspace: path.basename(path.resolve(__dirname, '../..')), extractionVersion: 'layout-fields-v2' });
 });
 
 // Routes

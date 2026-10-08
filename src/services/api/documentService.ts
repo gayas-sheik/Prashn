@@ -33,9 +33,9 @@ export async function getDocuments(): Promise<DocumentItem[]> {
   return (data.documents || []).map(mapDocument);
 }
 
-export async function getDocument(id: string): Promise<DocumentItem | null> {
+export async function getDocument(id: string, signal?: AbortSignal): Promise<DocumentItem | null> {
   try {
-    const data = await apiClient(`/documents/${id}`);
+    const data = await apiClient(`/documents/${id}`, { signal });
     return mapDocument(data.document);
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) return null;

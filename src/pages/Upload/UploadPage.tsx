@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   UploadCloud, 
@@ -14,22 +14,67 @@ import {
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
-import type { StagedUploadFile, DocumentType } from '../../types';
-import { uploadDocuments } from '../../services/api/documentService';
+import type { StagedUploadFile, DocumentType, DocumentItem } from '../../types';
+import { uploadDocuments, getDocument, retryDocument } from '../../services/api/documentService';
 import { getUploadValidationError } from '../../services/uploadValidation';
 
 export const UploadPage: React.FC = () => {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const resultsRef = useRef<HTMLElement>(null);
 
   const [mode, setMode] = useState<'batch' | 'single'>('batch');
   const [isDragging, setIsDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [overallProgress, setOverallProgress] = useState(0);
-  const [uploadSuccess, setUploadSuccess] = useState(false);
   const [uploadMessage, setUploadMessage] = useState('');
+  const [results, setResults] = useState<DocumentItem[]>([]);
+  const [autoOpenId, setAutoOpenId] = useState<string | null>(null);
+  const [trackingError, setTrackingError] = useState('');
+  const [retryingId, setRetryingId] = useState<string | null>(null);
 
   const [stagedFiles, setStagedFiles] = useState<StagedUploadFile[]>([]);
+
+  useEffect(() => {
+    if (results.length) resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [results.length]);
+
+  const pendingKey = results.filter(doc => !['Completed', 'Failed'].includes(doc.status)).map(doc => doc.id).join(',');
+  useEffect(() => {
+    if (!pendingKey) return;
+    let disposed = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const controller = new AbortController();
+    const poll = async () => {
+      try {
+        const documents = await Promise.all(pendingKey.split(',').map(id => getDocument(id, controller.signal)));
+        if (disposed) return;
+        const missing = documents.some(doc => !doc);
+        setTrackingError(missing ? 'An uploaded document is no longer available. Check the Documents list.' : '');
+        setResults(current => current.map(doc => documents.find(updated => updated?.id === doc.id) || doc));
+      } catch (error) {
+        if (disposed) return;
+        setTrackingError(error instanceof Error ? error.message : 'Unable to refresh processing status. Retrying…');
+      }
+      if (!disposed) timer = setTimeout(poll, 2000);
+    };
+    void poll();
+    return () => { disposed = true; controller.abort(); clearTimeout(timer); };
+  }, [pendingKey]);
+
+  useEffect(() => {
+    if (autoOpenId && results.some(doc => doc.id === autoOpenId && doc.status === 'Completed')) navigate(`/documents/${autoOpenId}`);
+  }, [autoOpenId, results, navigate]);
+
+  const retryResult = async (id: string) => {
+    setRetryingId(id); setTrackingError('');
+    try {
+      const updated = await retryDocument(id);
+      if (updated) setResults(current => current.map(doc => doc.id === id ? updated : doc));
+      else setTrackingError('This document is no longer available.');
+    } catch (error) { setTrackingError(error instanceof Error ? error.message : 'Unable to retry processing'); }
+    finally { setRetryingId(null); }
+  };
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -51,6 +96,7 @@ export const UploadPage: React.FC = () => {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       addFiles(Array.from(e.target.files));
+      e.target.value = '';
     }
   };
 
@@ -69,6 +115,8 @@ export const UploadPage: React.FC = () => {
 
   const addFiles = (files: File[]) => {
     if (uploading) return;
+    if (mode === 'batch' && stagedFiles.length + files.length > 20) { setUploadMessage('Select at most 20 files per batch.'); return; }
+    setAutoOpenId(null);
     const newItems: StagedUploadFile[] = files.map((file, idx) => ({
       id: `stg-${Date.now()}-${idx}`,
       file,
@@ -87,23 +135,24 @@ export const UploadPage: React.FC = () => {
     } else {
       setStagedFiles((prev) => [...prev, ...newItems]);
     }
-    setUploadSuccess(false);
     setUploadMessage('');
   };
 
   const removeFile = (id: string) => {
+    setAutoOpenId(null);
     setStagedFiles((prev) => prev.filter((f) => f.id !== id));
   };
 
   const clearAll = () => {
     setStagedFiles([]);
-    setUploadSuccess(false);
+    setResults([]); setAutoOpenId(null); setUploadMessage(''); setTrackingError('');
   };
 
   const startUpload = async () => {
     const eligible = stagedFiles.filter(file => file.file && !['Uploaded', 'Completed'].includes(file.status) && !getUploadValidationError(file.file));
     if (!eligible.length) return;
     setUploading(true);
+    setAutoOpenId(null);
     setUploadMessage('');
     setOverallProgress(0);
     let finished = 0;
@@ -121,10 +170,9 @@ export const UploadPage: React.FC = () => {
     setOverallProgress(100);
     setUploading(false);
     
-    if (uploadedDocs.length === eligible.length) {
-      setUploadSuccess(true);
-    } else {
-      setUploadSuccess(false);
+    setResults(current => [...current, ...uploadedDocs.filter(doc => !current.some(existing => existing.id === doc.id))]);
+    if (stagedFiles.length === 1 && uploadedDocs.length === 1) setAutoOpenId(uploadedDocs[0].id);
+    if (uploadedDocs.length !== eligible.length) {
       setUploadMessage(`${uploadedDocs.length} of ${eligible.length} files uploaded. Retry the failed files using Upload / Retry Files.`);
     }
   };
@@ -214,7 +262,7 @@ export const UploadPage: React.FC = () => {
           </span>
         </p>
         <p className="text-[12px] text-[#64748B] dark:text-[#94A3B8] mt-1 font-mono">
-          Supported formats: PDF, JPG, JPEG, PNG (Max 25MB per file, up to 50 files per batch)
+          Supported formats: PDF, JPG, JPEG, PNG (Max 10 MB per file, up to 20 files per batch)
         </p>
         <div className="flex items-center justify-center gap-1.5 text-[11px] text-[#059669] mt-3">
           <ShieldCheck className="w-4 h-4" />
@@ -317,7 +365,7 @@ export const UploadPage: React.FC = () => {
 
                     {['Uploaded', 'Completed'].includes(file.status) && (
                       <Badge variant="success" icon={<CheckCircle2 className="w-3 h-3" />}>
-                        Uploaded · Processing queued
+                        Uploaded
                       </Badge>
                     )}
                     {file.status === 'Failed' && <span role="alert" className="max-w-[180px] text-[11px] text-red-600">{file.error || 'Upload failed. Remove and add the file to retry.'}</span>}
@@ -339,43 +387,50 @@ export const UploadPage: React.FC = () => {
         </Card>
       )}
 
-      {/* Post-Upload Success State Card */}
-      {uploadSuccess && (
-        <Card className="bg-[#ECFDF5] dark:bg-[#064E3B20] border-[#A7F3D0] dark:border-[#065F46]">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div className="flex items-start gap-3">
-              <CheckCircle2 className="w-5 h-5 text-[#059669] flex-shrink-0 mt-0.5" />
-              <div>
-                <h4 className="text-[14px] font-semibold text-[#065F46] dark:text-[#34D399]">
-                  {stagedFiles.length} documents queued successfully!
-                </h4>
-                <p className="text-[12px] text-[#065F46] dark:text-[#A7F3D0] mt-0.5">
-                  Live extraction status and processing stages are visible in Processing view.
-                </p>
-              </div>
+      {results.length > 0 && <section ref={resultsRef} aria-label="Processing results" className="space-y-4 scroll-mt-24">
+        <div role="status" aria-live="polite" className="space-y-1">
+          <h2 className="text-[18px] font-semibold">Processing Results</h2>
+          <p className="text-[13px] text-[#64748B] dark:text-[#94A3B8]">
+            {results.filter(doc => doc.status === 'Completed').length} of {results.length} documents ready.
+            {autoOpenId ? ' Your result opens automatically when processing finishes.' : ' Completed results appear below automatically.'}
+          </p>
+        </div>
+        {trackingError && <p role="alert" className="text-sm text-red-600">{trackingError}</p>}
+        {results.map(doc => <Card key={doc.id} title={doc.name} subtitle={`${doc.type} · ${doc.pagesCount} pages`} headerAction={
+          <Badge variant={doc.status === 'Completed' ? 'success' : doc.status === 'Failed' ? 'error' : 'info'}>{doc.status}</Badge>
+        }>
+          {doc.status === 'Failed' ? <div className="space-y-3">
+            <p role="alert" className="text-sm text-red-600">{doc.failureReason || 'Processing failed. Try a clearer scan or an unlocked PDF.'}</p>
+            <Button size="sm" onClick={() => retryResult(doc.id)} disabled={retryingId !== null} loading={retryingId === doc.id}>Retry Processing</Button>
+          </div> : doc.status !== 'Completed' ? <p className="text-sm text-[#64748B] flex items-center gap-2">
+            <RefreshCw className="w-4 h-4 animate-spin" />{doc.status}. Results will appear here when ready.
+          </p> : <div className="space-y-4">
+            <div className="max-h-[360px] overflow-y-auto overscroll-contain space-y-2 pr-1">
+              {doc.extractedFields.map((field, index) => <div key={index} className="flex items-start justify-between gap-3 p-2 rounded border border-[#E2E8F0] dark:border-[#334155] text-[13px]">
+                <span className="text-[#64748B] dark:text-[#94A3B8]">{field.label}{field.page ? ` · Page ${field.page}` : ''}</span>
+                <span className="min-w-0 text-right whitespace-pre-wrap break-words font-medium">{field.value}</span>
+              </div>)}
+              {!doc.extractedFields.length && <div className="space-y-3">
+                <p className="text-sm text-[#64748B]">No structured fields recognized. Extracted text is available below.</p>
+                {doc.pages?.map(page => <div key={page.page} className="text-sm">
+                  <p className="font-medium">Page {page.page}</p>
+                  <p className="whitespace-pre-wrap break-words">{page.text.slice(0, 1000)}{page.text.length > 1000 ? '…' : ''}</p>
+                </div>)}
+              </div>}
             </div>
-
-            <div className="flex items-center gap-2">
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => navigate('/documents')}
-              >
-                View in Documents Table
-              </Button>
-              <Button
-                size="sm"
-                variant="primary"
-                icon={<ArrowRight className="w-3.5 h-3.5" />}
-                iconPosition="right"
-                onClick={() => navigate('/processing')}
-              >
-                Go to Processing Queue
-              </Button>
+            {!!doc.lineItems?.length && <div className="overflow-x-auto">
+              <table className="w-full text-[12px] text-left">
+                <thead><tr><th className="p-2">Item</th><th className="p-2">Quantity</th><th className="p-2">Unit Price</th><th className="p-2">Amount</th></tr></thead>
+                <tbody>{doc.lineItems.map(item => <tr key={item.id}><td className="p-2">{item.description}</td><td className="p-2">{item.quantity}</td><td className="p-2 whitespace-nowrap">{item.unitPrice}</td><td className="p-2 whitespace-nowrap">{item.amount}</td></tr>)}</tbody>
+              </table>
+            </div>}
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="secondary" onClick={() => navigate(`/documents/${doc.id}`)}>View Full Results</Button>
+              <Button size="sm" icon={<ArrowRight className="w-3.5 h-3.5" />} iconPosition="right" onClick={() => navigate(`/documents/${doc.id}/qa`)}>Ask Questions</Button>
             </div>
-          </div>
-        </Card>
-      )}
+          </div>}
+        </Card>)}
+      </section>}
     </div>
   );
 };

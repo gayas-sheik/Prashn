@@ -31,9 +31,13 @@ npm run dev
 
 Open Vite's printed URL, normally `http://localhost:5173`. The default backend is `http://localhost:5000`; health is `/api/health`. Register, log in, upload a PDF/PNG/JPEG, wait for completion, inspect the original and Full Text, then ask questions. Limits are 10 MiB per file, 20 files per batch API request and 100 PDF pages by default.
 
+Both frontend and backend must run from the same current checkout. `/api/health` reports `workspace` and `extractionVersion`; the current extraction marker is `layout-fields-v2`. An earlier screenshot used the latest frontend with an older backend from the sibling `Prashn` folder. The local ignored `backend/.env` now points to that folder's existing database and storage to preserve those uploads while running the latest code. Those local paths are not required on another machine.
+
 For a compiled backend, run `npm run build` then `npm start` inside `backend/`. Restart that server after rebuilding. Reprocess existing documents to apply newer extraction logic. A previous preview session used ports 5174/5050; those are session-specific rather than defaults.
 
 ## Verification
+
+A single-file upload opens its results automatically when processing completes. Batch results appear on the upload screen with real statuses, extracted fields, line items and retry actions for failures. No manual trip to the processing queue is needed.
 
 Backend:
 
@@ -49,7 +53,9 @@ npm run build
 npm run lint
 ```
 
-The latest completed run passed 15 backend cases and the frontend build. Lint exits successfully with React advisory warnings. Browser visual/interactive testing remains outstanding. Tests generate isolated artifacts under `backend/.test-output/`.
+The latest completed run passed 18 backend cases and the frontend build. Lint exits successfully with React advisory warnings. Browser visual/interactive testing remains outstanding. Tests generate isolated artifacts under `backend/.test-output/`.
+
+Repeated fields are retained across pages, including identical values. Broad date/amount questions return all recognized values with page citations. Page-specific questions such as “What is the date on page 3?” restrict the answer to that page. Restart an existing compiled backend and use Reprocess on previously uploaded documents to apply these extraction fixes.
 
 ## Current boundaries
 

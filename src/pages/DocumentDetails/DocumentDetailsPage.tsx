@@ -248,7 +248,7 @@ export const DocumentDetailsPage: React.FC = () => {
             {/* Document Canvas Preview */}
             <div className="p-6 bg-[#64748B10] flex items-center justify-center min-h-[580px] overflow-auto">
               <div
-                className="w-[595px] min-h-[742px] bg-white text-[#0F172A] shadow-layer2 border border-[#CBD5E1] p-8 relative rounded-[2px] transition-transform select-none"
+                className="w-[595px] max-w-full h-[742px] bg-white text-[#0F172A] shadow-layer2 border border-[#CBD5E1] p-8 relative rounded-[2px] transition-transform select-none"
               >
                 {/* Actual Document Content Preview */}
                 <div className="w-full h-full flex flex-col items-center justify-center relative">
@@ -357,10 +357,10 @@ export const DocumentDetailsPage: React.FC = () => {
                           className="flex items-center justify-between p-2 rounded-[4px] bg-[#F8FAFC] dark:bg-[#162032] border border-[#E2E8F0] dark:border-[#2D3F5A] text-[12px]"
                         >
                           <span className="text-[#64748B] dark:text-[#94A3B8] font-medium">
-                            {field.label}
+                            {field.label}{field.page ? ` · Page ${field.page}` : ''}
                           </span>
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
+                          <div className="flex items-start min-w-0 gap-2">
+                            <span className="whitespace-pre-wrap break-words min-w-0 font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
                               {field.value}
                             </span>
                             {field.confidence && (

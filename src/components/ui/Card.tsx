@@ -5,6 +5,7 @@ export interface CardProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 't
   subtitle?: React.ReactNode;
   headerAction?: React.ReactNode;
   noPadding?: boolean;
+  contentClassName?: string;
 }
 
 export const Card: React.FC<CardProps> = ({
@@ -12,6 +13,7 @@ export const Card: React.FC<CardProps> = ({
   subtitle,
   headerAction,
   noPadding = false,
+  contentClassName = '',
   children,
   className = '',
   ...props
@@ -40,7 +42,7 @@ export const Card: React.FC<CardProps> = ({
           {headerAction && <div className="flex items-center gap-2">{headerAction}</div>}
         </div>
       )}
-      <div className={noPadding ? '' : 'p-4'}>{children}</div>
+      <div className={`${noPadding ? '' : 'p-4'} ${contentClassName}`}>{children}</div>
     </div>
   );
 };

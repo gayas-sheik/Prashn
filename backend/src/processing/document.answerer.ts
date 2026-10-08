@@ -6,7 +6,7 @@ export const NOT_FOUND = "I couldn't find that information in this document.";
 export interface DocumentAnswer { text: string; citations: QACitation[]; }
 export interface DocumentAnswerer { answer(question: string, doc: Document): Promise<DocumentAnswer>; }
 const absent = (): DocumentAnswer => ({ text: NOT_FOUND, citations: [] });
-const normalized = (text: string) => text.toLowerCase().replace(/['’]s\b/g, '').replace(/[^\p{L}\p{N}\s]/gu, ' ');
+const normalized = (text: string) => text.toLowerCase().replace(/\bwhatt\b/g, 'what').replace(/['’]s\b/g, '').replace(/[^\p{L}\p{N}\s]/gu, ' ');
 const ignored = new Set('what which who whom whose is are was were be been being the a an this that these those document invoice receipt form please tell me about can could would you your it its of to for in on at from and or does do did how much many give show find get listed purchased bought name amount unit provided mentioned shown given stated'.split(' '));
 const synonyms: Record<string, string> = { seller: 'vendor', supplier: 'vendor', issuer: 'vendor', client: 'customer', buyer: 'customer', cost: 'price', charge: 'price', rate: 'price', qty: 'quantity', product: 'item', service: 'item', gst: 'tax', vat: 'tax', location: 'address', telephone: 'phone', mobile: 'phone', coverage: 'cover', expires: 'expiry', expiration: 'expiry' };
 const words = (text: string) => normalized(text).replace(/\bbefore tax\b/g, 'subtotal')
@@ -17,7 +17,7 @@ const words = (text: string) => normalized(text).replace(/\bbefore tax\b/g, 'sub
   .split(/\s+/).filter(word => word && !ignored.has(word)).map(word => {
   const singular = word.length > 3 ? word.replace(/ies$/, 'y').replace(/s$/, '') : word;
   return synonyms[singular] || singular;
-});
+}).filter(word => !ignored.has(word) && !['all', 'list', 'extract', 'when'].includes(word));
 const cite = (doc: Document, page: number, snippet: string, section: string, confidence = 80): QACitation => ({ id: randomUUID(), source: doc.originalFileName, page, snippet, section, confidence });
 const sourceForField = (field: ExtractedField, doc: Document) => {
   const page = doc.pages?.find(page => page.page === field.page && page.text.includes(field.snippet || field.value)) || doc.pages?.find(page => page.text.includes(field.value));
@@ -27,6 +27,13 @@ const sourceForField = (field: ExtractedField, doc: Document) => {
 export class ExtractiveDocumentAnswerer implements DocumentAnswerer {
   async answer(question: string, doc: Document): Promise<DocumentAnswer> {
     const query = normalized(question);
+    const pageSelection = query.match(/\b(?:on |from |in )?page\s+(\d+)\b/);
+    if (pageSelection) {
+      const number = Number(pageSelection[1]);
+      const page = doc.pages?.find(page => page.page === number);
+      if (!page) return absent();
+      return this.answer(query.replace(pageSelection[0], ''), { ...doc, pages: [page], extractedFields: doc.extractedFields?.filter(field => field.page === number), lineItems: doc.lineItems?.filter(item => item.page === number) });
+    }
     const fields = doc.extractedFields || [];
     const pages = doc.pages || [];
     const keywords = words(question);
@@ -35,6 +42,13 @@ export class ExtractiveDocumentAnswerer implements DocumentAnswerer {
       if (matches.length === 1) return fieldAnswer(matches[0]);
       return { text: `The document lists multiple values:\n${matches.map(field => `${field.label}${field.page ? ` (page ${field.page})` : ''}: ${field.value}`).join('\n')}`, citations: matches.flatMap(field => sourceForField(field, doc)) };
     };
+    if (/\b(?:invoice|invoices|receipt|receipts)\b/.test(query) && keywords.every(word => ['count', 'there'].includes(word)) && (/\bhow many\b|\b(?:count|list|show)\b/.test(query) || /^(?:what is (?:the |this )?|which )(?:invoice|receipt)\s*$/.test(query.trim()))) {
+      const label = /\breceipts?\b/.test(query) ? 'Receipt Number' : 'Invoice Number';
+      const identifiers = fields.filter(field => field.label === label);
+      if (!identifiers.length) return absent();
+      if (/\bhow many\b|\bcount\b/.test(query)) return { text: `I found **${new Set(identifiers.map(field => field.value)).size} distinct ${label === 'Invoice Number' ? 'invoice' : 'receipt'} numbers** in this document.`, citations: identifiers.flatMap(field => sourceForField(field, doc)) };
+      return fieldsAnswer(identifiers);
+    }
     // A payable total does not establish that payment happened.
     if (/\bpaid\b|\bpayment status\b/.test(query)) {
       const amountRequested = /\bhow much\b/.test(query) || /^(?:what|which)\b/.test(query) && /\b(?:amount|sum|total)\b/.test(query);
@@ -74,17 +88,19 @@ export class ExtractiveDocumentAnswerer implements DocumentAnswerer {
       const aliases: Record<string, string> = { 'before tax': 'subtotal', gst: 'tax', vat: 'tax', 'sub total': 'subtotal', birth: 'date of birth', dob: 'date of birth' };
       const label = /^(?:tax (?:rate|percent|percentage)|(?:gst|vat) rate)$/.test(specific) ? 'tax rate' : aliases[specific] || specific;
       const subject = /\bcustomer\b|\bbuyer\b|\bclient\b/.test(query) ? 'customer' : /\bvendor\b|\bseller\b|\bsupplier\b/.test(query) ? 'vendor' : '';
-      const field = fields.find(field => normalized(field.label) === `${subject} ${label}`) || (!subject || subject === 'vendor' ? fields.find(field => normalized(field.label) === label) : undefined);
-      if (field) {
+      let matching = fields.filter(field => normalized(field.label) === `${subject} ${label}`.trim());
+      if (!matching.length && (!subject || subject === 'vendor')) matching = fields.filter(field => normalized(field.label) === label);
+      if (matching.length) {
         const extras = keywords.filter(word => ![...words(label), subject, 'payment', 'before', ...(label === 'email' ? ['address'] : [])].includes(word));
-        if (extras.every(word => words(`${field.label} ${field.value}`).includes(word))) return fieldAnswer(field);
+        const qualified = matching.filter(field => extras.every(word => words(`${field.label} ${field.value}`).includes(word)));
+        if (qualified.length) return fieldsAnswer(qualified);
       }
-      if (label === 'tax' && /\b(?:amount|cost|charge|price)\b|\bhow much\b/.test(query) && !field) return absent();
-      if (label === 'tax rate' && !field) return absent();
+      if (label === 'tax' && /\b(?:amount|cost|charge|price)\b|\bhow much\b/.test(query) && !matching.length) return absent();
+      if (label === 'tax rate' && !matching.length) return absent();
     }
     if (!specific && /\b(?:date|dated|when)\b/.test(query) && keywords.every(word => ['date','dated','when','issued','issue'].includes(word))) {
-      const date = fields.find(field => field.label === (doc.documentType === 'Invoice' ? 'Invoice Date' : 'Date'));
-      if (date) return fieldAnswer(date);
+      const dates = fields.filter(field => field.label === (doc.documentType === 'Invoice' ? 'Invoice Date' : 'Date'));
+      if (dates.length) return fieldsAnswer(dates);
     }
     // Arbitrary labels work as well as the standard invoice/form schema.
     const generic = !specific ? fields.filter(field => keywords.length && keywords.every(word => words(field.label).includes(word))) : [];

@@ -33,7 +33,7 @@ Run `npm test` from `backend/`. Tests generate actual PDFs and raster images, us
 | Visual PDF reading order | Values drawn before labels are reassembled by page coordinates; date, invoice number and customer stay paired with actual values; bare headings are rejected |
 | Optional provider contract | Mocked model response must quote actual page content; invalid citations are rejected. No model is installed or invoked. |
 
-All fifteen automated cases passed. Backend build, frontend production build, and the backend development command also passed. Lint exits successfully with React advisory warnings concerning effect state updates, context exports and event-handler purity; it is not warning-free.
+All eighteen automated cases passed in the latest local run. Backend build and frontend production build passed; the backend development command had passed in the earlier repair pass. Lint exits successfully with React advisory warnings concerning effect state updates, context exports and event-handler purity; it is not warning-free.
 
 ## Served application check
 
@@ -58,4 +58,24 @@ A real uploaded three-page invoice was rendered and visually inspected after the
 
 Development was paused at the user's request on 9 October 2026. The last run completed with 15 tests passing. Two additional cases cover column fields, multiline addresses, payment method/amount, GST identifiers, distinct invoice numbers across pages, and classification word boundaries. The latest frontend build and lint passed, with existing React advisory warnings.
 
-The latest column-field changes were verified with anonymous generated fixtures. They were not reapplied to the stored private invoice before the pause, and the running static backend was not restarted for this final build. Existing records need Reprocess after the latest backend is launched. No model or AWS service was installed or deployed.
+The latest column-field changes were verified with anonymous generated fixtures. They were not reapplied to the stored private invoice before the pause, and the running static backend was not restarted for that build. Existing records need Reprocess after the latest backend is launched. No model or AWS service was installed or deployed.
+
+## General multi-page repair verification
+
+Development resumed locally after the reported missing invoices and basic-question failures. Extraction no longer stops at the first label/amount match or deduplicates matching values across different pages. Explicit compound labels are checked before matching short prefixes, preventing Date from consuming Date of Birth. Generic repeated colon fields and FROM/TO blocks are retained. Answers return matching values with their pages rather than selecting the first date or tax field.
+
+Generated digital PDFs with 1, 2, 4 and 7 invoice pages passed extraction and question checks; separate cases cover repeated receipts, forms, unknown-document fields and two distinct invoice entries on one page. Questions include the reported “what is the invoice” and “Whatt is the date”, plural dates, totals, tax, due dates, distinct invoice-number count, page-scoped questions, missing pages and punctuated page selectors. A five-page HTTP upload test verifies stored fields, every answer citation, conversation persistence, original bytes and retry results.
+
+The chat card now gives its inner content a constrained flex height so the message thread can scroll while the input remains reachable. Chat autoscroll targets that thread instead of the whole page. Long field values wrap, and PDF preview sizing no longer forces a 500-pixel iframe inside a 400-pixel clipped container. Frontend build/lint pass. The browser tool failed to start, so these layout changes still need visual and interactive browser review.
+
+All 18 backend cases pass. This run uses an isolated test database and generated fixtures; it does not demonstrate perfect extraction for arbitrary layouts or reprocess the user's existing uploads. Restart any static compiled backend and reprocess affected existing documents. Changes were kept local during this verification pass.
+
+## Upload result flow update
+
+The upload screen now polls accepted documents without overlapping polls, cancels status requests on unmount, and automatically navigates to completed single-file results. Batch results render recognized fields, line items or page text previews inline, retaining failure reasons and processing retry actions. Removing a selection cancels automatic navigation; completed documents remain stored. File inputs reset so the same file can be selected again. Displayed upload limits now match validation, and the UI bounds selections to 20 files. Frontend build and lint pass, with existing advisory warnings. Interactive browser testing remains outstanding; the earlier 18 backend tests validate the underlying upload/status/retry contracts, not these browser interactions.
+
+## Runtime mismatch and screenshot follow-up
+
+Process launch paths confirmed that the frontend on 5173 used `Prashn-latest`, while the backend on 5000 used the older `Prashn` checkout. The older backend had no pending jobs when switched. Its database was backed up, and the latest backend was configured through ignored local environment paths to retain the existing database and storage. The document shown in the screenshot was then reprocessed through the latest API. Its invoice number, date and total passed assertions, original-file checksum remained identical, and conversation row count was unchanged. Earlier incorrect replies remain historical messages; new questions use the corrected record.
+
+Health through the frontend proxy now reports `workspace: Prashn-latest` and `extractionVersion: layout-fields-v2`. The default Q&A PDF preview requests fit-to-width rather than forcing 100% zoom in a narrow panel. The `view=FitH` parameter is supported by the [Chromium PDF parameter parser](https://raw.githubusercontent.com/chromium/chromium/main/chrome/browser/resources/pdf/open_pdf_params_parser.ts); interactive rendering still needs browser verification.
