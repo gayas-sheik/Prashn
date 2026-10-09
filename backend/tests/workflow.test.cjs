@@ -409,3 +409,25 @@ after(async () => {
   if (server) await new Promise(resolve => server.close(resolve));
   if (run) await require('../dist/database/db').closeDb();
 });
+
+
+test('ride invoice columns return the vehicle value with its source page', async () => {
+  const source = path.join(run, 'fictional-ride-invoice.pdf');
+  await fs.writeFile(source, pdf([
+    { rows: ['Payment Summary', ['Ride ID', 'SYNTHETIC-RIDE-001'], ['Total', 'INR 45.00']] },
+    { valuesFirst: true, rows: ['Tax Invoice', ['Invoice No.', 'SYNTHETIC-TAX-001'], ['Invoice Date', '2026-10-09'], ['State', 'Example State'], ['GST Number', 'SYNTHETIC-GST-123'], ['Vehicle Number', 'AB12C3456'], ['Captain Name', 'Example Driver'], ['Customer Name', 'Example Customer'], ['Captain Fee', 'INR 40.00']] },
+    { rows: ['Tax Invoice', ['Invoice No.', 'SYNTHETIC-TAX-001'], ['Booking Fee', 'INR 5.00']] },
+  ]));
+  const result = await extractor.extractText(source, 'application/pdf');
+  const doc = { originalFileName: 'fictional-ride-invoice.pdf', documentType: 'Invoice', pages: result.pages, pagesCount: result.pagesCount,
+    ...structured.extractFields(result.text, 'Invoice', result.pages) };
+  const vehicle = doc.extractedFields.find(field => field.label === 'Vehicle Number');
+  assert.equal(vehicle.value, 'AB12C3456');
+  assert.equal(vehicle.page, 2);
+  const answer = await answerer.answer('What is the vehicle number?', doc);
+  assert.equal(answer.text, 'The vehicle number is **AB12C3456**.');
+  assert.deepEqual(answer.citations.map(c => c.page), [2]);
+  assert.match(answer.citations[0].snippet, /Vehicle Number\s+AB12C3456/);
+  assert.ok(result.pages[1].text.includes(answer.citations[0].snippet));
+  assert.equal((await answerer.answer('What is the vehicle number on page 3?', doc)).text, require('../dist/processing/document.answerer').NOT_FOUND);
+});

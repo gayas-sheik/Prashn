@@ -46,3 +46,24 @@ test('column values do not absorb unrelated footer text; multiline addresses rem
   const address=new StructuredFieldExtractor().extractFields('INVOICE\nCustomer Address\n10 Example Road\nExample City\nTotal: USD 1.00','Invoice');
   assert.equal(address.extractedFields.find(f=>f.label==='Customer Address').value,'10 Example Road\nExample City');
 });
+
+
+test('passage fallback refuses labels without an associated answer value', async () => {
+  const answerer = new ExtractiveDocumentAnswerer();
+  for (const heading of ['Vehicle Number', 'Vehicle Number:', 'Vehicle\tNumber']) {
+    const missing = { originalFileName: 'missing-value.pdf', documentType: 'Invoice', pagesCount: 2,
+      pages: [{ page: 1, text: 'Payment Summary', extractionMethod: 'text' }, { page: 2, text: heading + '\nCaptain Name\nExample Driver', extractionMethod: 'text' }], extractedFields: [], lineItems: [] };
+    const answer = await answerer.answer('What is the vehicle number?', missing);
+    assert.equal(answer.text, NOT_FOUND, heading);
+    assert.deepEqual(answer.citations, []);
+  }
+});
+
+test('passage fallback selects supporting content instead of a shorter heading', async () => {
+  const passage = 'Warranty covers manufacturing defects for twelve months.';
+  const source = { originalFileName: 'warranty-heading.pdf', documentType: 'Contract', pagesCount: 1,
+    pages: [{ page: 1, text: 'Warranty\n' + passage, extractionMethod: 'text' }], extractedFields: [], lineItems: [] };
+  const answer = await new ExtractiveDocumentAnswerer().answer('What is the warranty?', source);
+  assert.equal(answer.text, 'Relevant document passages:\n\n' + passage);
+  assert.deepEqual(answer.citations.map(c => c.snippet), [passage]);
+});

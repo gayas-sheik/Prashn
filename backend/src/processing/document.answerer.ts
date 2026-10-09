@@ -134,7 +134,13 @@ export class ExtractiveDocumentAnswerer implements DocumentAnswerer {
     }));
     const duration = query.match(/^how long is (?:the )?([\p{L}\s]+)$/u)?.[1]?.trim();
     const durationWords = duration ? words(duration) : [];
-    const matched = passages.filter(passage => duration ? durationWords.length && durationWords.every(word => words(passage.text).includes(word)) && /\b(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirty)\s+(?:business\s+)?(?:days?|weeks?|months?|years?|hours?)\b/i.test(passage.text) : keywords.length && keywords.every(word => words(passage.text).includes(word)))
+    const matched = passages.filter(passage => {
+      const passageWords = words(passage.text);
+      if (duration) return durationWords.length && durationWords.every(word => passageWords.includes(word)) && /\b(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirty)\s+(?:business\s+)?(?:days?|weeks?|months?|years?|hours?)\b/i.test(passage.text);
+      // A heading that only repeats the requested attribute contains no answer.
+      // Keep passages with additional evidence, without guessing adjacent values.
+      return keywords.length && keywords.every(word => passageWords.includes(word)) && passageWords.some(word => !keywords.includes(word));
+    })
       .sort((left, right) => left.text.length - right.text.length).slice(0, 3);
     return matched.length ? { text: `Relevant document passages:\n\n${matched.map(passage => passage.text).join('\n\n')}`, citations: matched.map(passage => cite(doc, passage.page, passage.text, 'Document passage', 75)) } : absent();
   }
