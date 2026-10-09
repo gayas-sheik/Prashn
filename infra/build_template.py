@@ -81,6 +81,8 @@ for role,entry,security in [("Api","server.js","ApiSecurity"),("Worker","worker.
     resource(role+"Profile","IAM::InstanceProfile",{"Roles":[ref(role+"Role")]})
     userdata = """#!/bin/bash
 set -euo pipefail
+mkdir -p /var/log/prashn
+exec > >(tee -a /var/log/prashn/bootstrap.log) 2>&1
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq curl unzip ca-certificates
@@ -94,10 +96,7 @@ tar -xzf /tmp/prashn.tar.gz -C /opt/prashn
 export AWS_REGION='${AWS::Region}' DOCUMENT_BUCKET='${Documents}' DYNAMODB_TABLE='${Data}' PROCESSING_QUEUE_URL='${Jobs}'
 export JWT_PARAMETER='${JwtParameter}' LOG_GROUP='${ApplicationLogs}' ENTRY='ENTRY_FILE' STACK_NAME='${AWS::StackName}' LOGICAL_RESOURCE='GROUP_NAME'
 bash /opt/prashn/infra/bootstrap.sh
-state=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --query 'Stacks[0].StackStatus' --output text --region "$AWS_REGION")
-if [[ "$state" == CREATE_IN_PROGRESS || "$state" == UPDATE_IN_PROGRESS ]]; then
-  aws cloudformation signal-resource --stack-name "$STACK_NAME" --logical-resource-id "$LOGICAL_RESOURCE" --unique-id "$(hostname)" --status SUCCESS --region "$AWS_REGION"
-fi
+bash /opt/prashn/infra/signal-ready.sh
 """.replace("ENTRY_FILE",entry).replace("GROUP_NAME",role+"Group")
     resource(role+"Launch","EC2::LaunchTemplate",{"LaunchTemplateData":{"ImageId":ref("UbuntuImage"),"InstanceType":ref("InstanceType"),"IamInstanceProfile":{"Arn":att(role+"Profile","Arn")},
       "MetadataOptions":{"HttpTokens":"required","HttpPutResponseHopLimit":1},"CreditSpecification":{"CpuCredits":"standard"},

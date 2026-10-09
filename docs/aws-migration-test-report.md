@@ -1,6 +1,6 @@
 # AWS migration preparation verification
 
-Date: **10 October 2026 (Asia/Kolkata)**. Source: migration preparation changes following the deployed `1b4217e` baseline. No new AWS resources were created during these checks.
+Date: **10 October 2026 (Asia/Kolkata)**. Source: migration preparation changes following the deployed `1b4217e` baseline. Preparation checks were local; subsequent owner-run rollout attempts recorded below did create AWS resources.
 
 ## Executed checks
 
@@ -57,8 +57,8 @@ Infrastructure lint initially found a missing VPC-link name and an invalid IAM `
 | DynamoDB accounts/documents/history/activity | IMPLEMENTED | TESTED; inspected ownership, history, migration and large-output results | BLOCKED pending rollout |
 | SQS workers, retry, leases and recovery | IMPLEMENTED | TESTED; inspected duplicate, fault, heartbeat and deletion cases | BLOCKED pending rollout |
 | Automatic API/worker scaling | IMPLEMENTED in template | TESTED by schema validation only | BLOCKED; no live scaling event executed |
-| CloudWatch logs/metrics/alarms | IMPLEMENTED in bootstrap/template | TESTED by source/schema review only | BLOCKED; no real log delivery inspected |
-| Single-entry deployment | IMPLEMENTED | Shell syntax and template validation passed; portability fix checked locally | FAILED in the first owner-run CloudShell attempt; fixed-script AWS rerun pending |
+| CloudWatch logs/metrics/alarms | IMPLEMENTED in bootstrap/template | TESTED by source/schema review and inspected owner-supplied log-stream/event output | VERIFIED for delivery of the supplied API/worker application logs; metrics/alarms and corrected bootstrap stream remain unverified |
+| Single-entry deployment | IMPLEMENTED | Shell syntax, template validation and eight handshake regressions passed; CloudShell native rebuild and 35 tests passed | FAILED: main stack rolled back after no worker success signal; corrected-handshake retry pending |
 | Existing-data import | IMPLEMENTED | TESTED with private synthetic snapshot; repeat import/source-preservation inspected | BLOCKED; real production data not imported |
 | Rendered AWS UI and error states | Existing design retained; upload integration changed | Frontend compile/lint passed | BLOCKED pending deployed browser checks |
 
@@ -80,3 +80,17 @@ Executed local verification after this correction:
 - Backend `npm test`: **35/35 passed**, zero failures/skips, 12.31 seconds on Windows.
 
 The actual CloudShell source rebuild, corrected deployment, live scaling/log delivery and new website acceptance remain pending owner-run output. The 18-case emulator suite was not repeated for this installation-only correction; its earlier evidence remains historical.
+
+## AWS rollout and readiness signal correction
+
+The owner pulled `64f4976`, installed the CloudShell C++ build tools and reran `apply`. Supplied output shows the incompatible prebuilt SQLite load followed by **a successful source rebuild and native checks** on CloudShell Amazon Linux 2023, Node **20.20.2**. Frontend build passed, and backend `npm test` passed **35/35**, zero failures/skips, in **15.59 seconds**. The AWS SDK emitted an advisory about future Node 22 requirements; fresh-instance bootstrap installed the pinned Node 22 release. The artifact stack was created successfully and the main stack entered creation.
+
+After the terminal reconnected, no deployment-script process was found by the owner. CloudFormation continued provisioning. Supplied events show CloudFront and scaling policies created, followed by worker failure at **2026-10-09 23:28:49 UTC** (10 October 2026, **04:58:49 IST**): `Received 0 SUCCESS signal(s) out of 1`. The API group's creation was cancelled, and final status was **ROLLBACK_COMPLETE**. Both new EC2 instances were terminated. This is a failed rollout; the new website was not published or accepted.
+
+The retained application group `/prashn/prashn-cloud/application` had streams for both instances. Inspected owner-supplied events show worker `i-0484257736cf644d2` logged `worker_started` at **23:12:05 UTC**, then a successful empty orphan-reconciliation result. API `i-0fbd2e4d3ff8fc738` logged DynamoDB configuration, server startup and repeated `/api/health` HTTP 200 responses from **23:12:00 UTC** onward. This verifies delivery of those application logs and the logged startup/health results, not document CRUD, queue processing, scaling, every metric or independent browser acceptance.
+
+The owner's worker console output confirms native checks, service and CloudWatch Agent startup, then a normally completed cloud-init final stage at **23:12:11 UTC**, before termination during rollback. It does not contain an explicit rejected-signal error. Source review found that the deployed user data used `--unique-id "$(hostname)"`. AWS's [SignalResource specification](https://docs.aws.amazon.com/AWSCloudFormation/latest/APIReference/API_SignalResource.html) requires the EC2 instance ID when signalling an Auto Scaling group. This is a confirmed code defect and a likely explanation for the observed missing accepted worker signal; the supplied logs alone do not prove the exact signal request/response.
+
+Correction: `infra/signal-ready.sh` checks for a creating/updating stack, obtains and validates its EC2 instance ID via IMDSv2, and sends the readiness signal with that ID. It propagates lookup/metadata/signal failures, uses bounded SDK/metadata retries, and prints no metadata token. The generated user data invokes it after the existing application startup checks; the release archive includes the helper. Bootstrap output now goes to a separate `{instance_id}/bootstrap` CloudWatch stream for future diagnosis.
+
+Local `python -m unittest discover -s infra/tests -v` passed **8/8** stubbed handshake checks in **1.52 seconds**: creation, update, completed-stack scale-out, rollback, invalid hostname ID, failed metadata retrieval, failed stack lookup and failed signal API. These contact neither AWS nor IMDS. Template regeneration and `cfn-lint infra/template.json infra/artifacts.json` passed. Application code was not changed by this correction; the latest actual backend evidence remains the owner's 35/35 CloudShell result. An actual accepted instance-ID readiness signal and complete corrected deployment remain pending a separate retry. Historical failed-run evidence is retained above.

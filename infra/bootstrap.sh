@@ -54,7 +54,7 @@ curl -fsS https://amazoncloudwatch-agent.s3.amazonaws.com/ubuntu/amd64/latest/am
 dpkg -i /tmp/cloudwatch.deb
 python3 - <<'PY'
 import json, os
-config={'agent':{'metrics_collection_interval':60},'logs':{'logs_collected':{'files':{'collect_list':[{'file_path':'/var/log/prashn/application.log','log_group_name':os.environ['LOG_GROUP'],'log_stream_name':'{instance_id}','timezone':'UTC'}]}}},'metrics':{'namespace':'Prashn','metrics_collected':{'mem':{'measurement':['mem_used_percent']},'disk':{'measurement':['used_percent'],'resources':['/']}},'append_dimensions':{'InstanceId':'${aws:InstanceId}'}}}
+config={'agent':{'metrics_collection_interval':60},'logs':{'logs_collected':{'files':{'collect_list':[{'file_path':'/var/log/prashn/application.log','log_group_name':os.environ['LOG_GROUP'],'log_stream_name':'{instance_id}','timezone':'UTC'}, {'file_path':'/var/log/prashn/bootstrap.log','log_group_name':os.environ['LOG_GROUP'],'log_stream_name':'{instance_id}/bootstrap','timezone':'UTC'}]}}},'metrics':{'namespace':'Prashn','metrics_collected':{'mem':{'measurement':['mem_used_percent']},'disk':{'measurement':['used_percent'],'resources':['/']}},'append_dimensions':{'InstanceId':'${aws:InstanceId}'}}}
 with open('/opt/aws/amazon-cloudwatch-agent/etc/prashn.json','w') as file: json.dump(config,file)
 PY
 /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c file:/opt/aws/amazon-cloudwatch-agent/etc/prashn.json -s

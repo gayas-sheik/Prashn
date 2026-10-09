@@ -69,6 +69,7 @@ if [[ "${PRASHN_APPROVE_DEPLOY:-}" != yes ]]; then
 fi
 [[ -z "$(git status --porcelain)" ]] || { echo 'Commit or resolve source changes before deploying a reproducible release'; exit 1; }
 mkdir -p .aws-build
+python3 -m unittest discover -s infra/tests -v
 npm ci --include=dev
 npm run build
 (cd backend && npm ci --include=dev && bash ../infra/verify-native.sh . && mkdir -p .test-output && npm test)
@@ -76,7 +77,7 @@ python3 - <<'PY'
 import json,subprocess,datetime
 json.dump({'revision':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'builtAt':datetime.datetime.now(datetime.timezone.utc).isoformat()},open('.aws-build/release-manifest.json','w'))
 PY
-tar -czf .aws-build/release.tar.gz backend/dist backend/package.json backend/package-lock.json infra/bootstrap.sh infra/verify-native.sh .aws-build/release-manifest.json
+tar -czf .aws-build/release.tar.gz backend/dist backend/package.json backend/package-lock.json infra/bootstrap.sh infra/verify-native.sh infra/signal-ready.sh .aws-build/release-manifest.json
 digest=$(sha256sum .aws-build/release.tar.gz | cut -d' ' -f1)
 aws cloudformation deploy --stack-name "$stack-artifacts" --template-file infra/artifacts.json --no-fail-on-empty-changeset
 bucket=$(aws cloudformation describe-stacks --stack-name "$stack-artifacts" --query 'Stacks[0].Outputs[?OutputKey==`Bucket`].OutputValue | [0]' --output text)

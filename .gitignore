@@ -35,5 +35,6 @@ backend/data/development/*.db
 .npm-cache/
 .test-output/
 .aws-build/
+__pycache__/
 *.db-shm
 *.db-wal

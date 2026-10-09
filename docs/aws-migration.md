@@ -1,6 +1,6 @@
 # Prashn AWS migration and deployment
 
-Prepared on **10 October 2026 (Asia/Kolkata)**. The cloud application code and deployment files are implemented and tested locally. **The new managed-storage/scaling stack has not been deployed or verified in AWS.** The existing [EC2 installation](ec2-deployment.md) continues to use its original compiled application, SQLite and local storage.
+Prepared on **10 October 2026 (Asia/Kolkata)**. The cloud application code and deployment files are implemented and tested locally. **The new managed-storage/scaling stack has not completed deployment or acceptance in AWS.** An owner-run attempt created infrastructure and started both services, then rolled back after missing readiness signals; see [the rollout evidence](aws-migration-test-report.md#aws-rollout-and-readiness-signal-correction). The existing [EC2 installation](ec2-deployment.md) continues to use its original compiled application, SQLite and local storage.
 
 ## Architecture supplied by this change
 
@@ -50,6 +50,8 @@ Public browser and origin connections use HTTPS. API Gateway reaches the interna
 | `infra/artifacts.json` | Separate private, retained release-artifact bucket |
 | `infra/bootstrap.sh` | Fresh Ubuntu instance installation, service and CloudWatch setup |
 | `infra/verify-native.sh` | Native dependency smoke checks; rebuilds an incompatible SQLite binary on Linux |
+| `infra/signal-ready.sh` | IMDSv2 instance ID and creation/update-only CloudFormation readiness handshake |
+| `infra/tests/test_signal_ready.py` | Stubbed handshake regression checks; no AWS or metadata network requests |
 | `backend/src/worker.ts` | Standalone SQS worker |
 | `backend/src/migrate.ts` | Read-only snapshot validation; explicit import with `--apply` |
 | `backend/src/reconcile.ts` | Read-only orphan review; explicit cleanup with `--apply` |
@@ -98,7 +100,26 @@ After reviewing costs, account service access and the changes:
 bash deploy.sh apply
 ```
 
-Apply asks for the account ID before creating resources and requires a clean committed source tree. Explicitly approved noninteractive automation can use `PRASHN_APPROVE_DEPLOY=yes`. It installs locked dependencies, builds the frontend, runs local backend regression tests, packages compiled backend files without secrets/native Windows modules, provisions the artifact and application stacks, publishes static files and checks HTTPS health. Fresh Ubuntu instances install their own production dependencies. Bootstrap verifies the release archive checksum and signals initial/rolling deployment readiness. A release manifest records the Git revision; deployed health exposes that revision through `release`.
+Apply asks for the account ID before creating resources and requires a clean committed source tree. Explicitly approved noninteractive automation can use `PRASHN_APPROVE_DEPLOY=yes`. It runs the stubbed readiness tests, installs locked dependencies, builds the frontend, runs local backend regression tests, packages compiled backend files without secrets/native Windows modules, provisions the artifact and application stacks, publishes static files and checks HTTPS health. Fresh Ubuntu instances install their own production dependencies. Bootstrap verifies the release archive checksum and signals initial/rolling deployment readiness using its EC2 instance ID retrieved through IMDSv2, as required by [the CloudFormation signal API](https://docs.aws.amazon.com/AWSCloudFormation/latest/APIReference/API_SignalResource.html). It skips late signals during rollback or ordinary scale-out of a completed stack. Startup and signal output is collected in `/var/log/prashn/bootstrap.log` and sent to the application log group under `{instance_id}/bootstrap`; tokens and environment-file contents are not printed. A release manifest records the Git revision; deployed health exposes that revision through `release`.
+
+Use a terminal multiplexer to preserve the process during an ordinary connection loss, and retain a deployment log. A full CloudShell environment shutdown can still stop the process. In CloudShell:
+
+```bash
+sudo dnf install -y tmux
+tmux new -s prashn-deploy
+```
+
+Inside that session, from the repository folder:
+
+```bash
+mkdir -p .aws-build
+set -o pipefail
+EXPECTED_ACCOUNT=683146427271 AWS_REGION=us-east-1 bash deploy.sh apply 2>&1 | tee .aws-build/deploy.log
+```
+
+After reconnecting, `tmux attach -t prashn-deploy` reattaches to the session if it still exists. Check the process and stack before starting a second deployment.
+
+For recovery from the observed `prashn-cloud` **ROLLBACK_COMPLETE**, preserve the failed stack and its retained logs/data resources while diagnosing. Use the corrected release with `PRASHN_STACK=prashn-cloud-v2` for a separate retry, avoiding the old retained log-group names. This creates new resources and does not reuse or migrate data from the failed attempt. The script supports a custom name; the same name must be supplied on every later update. Review the old attempt's retained buckets/table/logs and artifact stack for deliberate cleanup after successful verification; they are not removed by the retry.
 
 The existing instance is neither adopted nor modified. Deployment outputs are saved to ignored `.aws-build/outputs.json`. The browser URL and health modes must show the new stack; a successful health check does not establish all features or scaling. Do not switch users to the new website until live acceptance and any required data import are verified.
 
@@ -158,6 +179,8 @@ cfn-lint infra/template.json infra/artifacts.json
 bash -n deploy.sh
 bash -n infra/bootstrap.sh
 bash -n infra/verify-native.sh
+bash -n infra/signal-ready.sh
+python3 -m unittest discover -s infra/tests -v
 ```
 
 See [the preparation verification report](aws-migration-test-report.md) for executed results and limits.
