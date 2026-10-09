@@ -294,6 +294,8 @@ Reprocessing uses the stored original and updates extraction results while retai
 
 Deleting a document removes its original, metadata, extracted text and associated conversation. The deletion event remains in account activity. There is no document trash or restore workflow. Clearing a conversation removes its persisted messages but keeps the document.
 
+Cleanup now precedes metadata removal so an early cleanup failure leaves an owned record for retry. Filesystem and SQLite changes do not form one transaction; later partial failures and cleanup reconciliation remain limitations documented in the [final audit](local-mvp-final-audit.md).
+
 Back up the database and original/processed storage together. Stop the backend for a consistent file-copy backup, or use a SQLite-aware database backup procedure and coordinate file storage. Do not assume copying only an active WAL database file is a complete backup. Verify restoration in a separate directory before replacing working data. Store backups and uploads outside version control.
 
 ## Configuration
@@ -303,7 +305,7 @@ Backend configuration loads `backend/.env`. Shell environment variables can also
 | Variable | Default / behavior |
 | --- | --- |
 | `PORT` | `5000` |
-| `NODE_ENV` | `development`; production refuses startup without an explicit JWT secret |
+| `NODE_ENV` | `development`; every environment refuses startup without a nonblank JWT secret |
 | `JWT_SECRET` | Set a private random signing secret; never use a shared example value |
 | `JWT_EXPIRES_IN` | `7d` |
 | `CORS_ORIGIN` | `http://localhost:5173`; use the actual frontend origin |
@@ -406,7 +408,9 @@ Optional evaluation, from `backend/`:
 npm run evaluate
 ~~~
 
-The normal backend suite builds TypeScript and runs `workflow.test.cjs` plus `question-language.test.cjs`. It generates fictional PDFs/images and isolated database/storage artifacts under `backend/.test-output/`. It checks real extraction/OCR, API workflows, authentication/ownership, original bytes, citations, limits, failures, retry/deletion/recovery, field disambiguation, multiline/column layouts, repeated pages and bounded follow-up safety. An optional-provider contract test uses mocked responses; it does not install or invoke a model.
+The normal backend suite builds TypeScript and runs `workflow.test.cjs`, `question-language.test.cjs` and `final-audit-faults.cjs`. It generates fictional PDFs/images and isolated database/storage artifacts under `backend/.test-output/`. It checks real extraction/OCR, API workflows, authentication/ownership, original bytes, citations, limits, failures, retry/deletion/recovery, field disambiguation, multiline/column layouts, repeated pages, bounded follow-up safety, missing-secret startup, registration/retry races, upload compensation and early deletion-cleanup failure. An optional-provider contract test uses mocked responses; it does not install or invoke a model.
+
+Run `npm run audit:local` from `backend/` for the separate acceptance checks through an isolated Vite proxy/backend pair. It uses ports 5177/5057 and disposable data under `.test-output/`; those ports must be free. See [the final audit](local-mvp-final-audit.md) for the latest evidence and remaining browser/real-layout/reliability limits. The recorded benchmark/browser observations below describe the earlier development pass.
 
 Recorded verification on 9 October 2026:
 

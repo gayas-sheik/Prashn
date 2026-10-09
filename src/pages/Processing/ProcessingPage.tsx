@@ -19,13 +19,15 @@ export const ProcessingPage: React.FC = () => {
   const navigate = useNavigate();
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   const loadData = async () => {
     try {
       const docs = await getDocuments();
       setDocuments(docs);
+      setError('');
     } catch (err) {
-      console.error("Failed to load documents", err);
+      setError(err instanceof Error ? err.message : 'Unable to load processing documents');
     } finally {
       setLoading(false);
     }
@@ -38,10 +40,13 @@ export const ProcessingPage: React.FC = () => {
   }, []);
 
   const handleRetry = async (id: string) => {
-    const updated = await retryDocument(id);
-    if (updated) {
-      setDocuments((prev) => prev.map((d) => (d.id === id ? updated : d)));
-    }
+    try {
+      const updated = await retryDocument(id);
+      if (updated) {
+        setDocuments((prev) => prev.map((d) => (d.id === id ? updated : d)));
+      }
+      setError('');
+    } catch (err) { setError(err instanceof Error ? err.message : 'Unable to retry processing'); }
   };
 
   const pipelineStages = [
@@ -68,6 +73,7 @@ export const ProcessingPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-[#E2E8F0] dark:border-[#334155]">
         <div>

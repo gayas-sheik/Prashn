@@ -38,7 +38,11 @@ export const register = async (req: Request, res: Response) => {
     await userRepo.createUser(newUser);
 
     res.status(201).json({ message: 'User created successfully' });
-  } catch (error) {
+  } catch (error: any) {
+    // The UNIQUE constraint is authoritative when registrations race.
+    if (error?.code === 'SQLITE_CONSTRAINT' && /users\.email/.test(error.message || '')) {
+      return res.status(409).json({ error: 'Email already registered' });
+    }
     console.error('Registration error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }

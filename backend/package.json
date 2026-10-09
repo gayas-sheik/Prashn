@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "npm run build && node --test tests/workflow.test.cjs tests/question-language.test.cjs",
+    "test": "npm run build && node --test tests/workflow.test.cjs tests/question-language.test.cjs tests/final-audit-faults.cjs",
+    "audit:local": "npm run build && node tests/final-audit.cjs",
     "dev": "nodemon --watch src --ext ts --exec \"npm run dev:server\"",
     "dev:server": "npm run build && node dist/server.js",
     "build": "tsc",

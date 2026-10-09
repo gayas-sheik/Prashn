@@ -13,6 +13,17 @@ const docRepo = new DocumentRepository();
 const activityRepo = new ActivityRepository();
 const storage = getStorageProvider();
 
+// Compensate a metadata failure while the newly stored original is still owned
+// by this upload. Never leave an inaccessible file after a rejected create.
+const persistUploadedDocument = async (doc: Document): Promise<void> => {
+  try { await docRepo.createDocument(doc); }
+  catch (error) {
+    try { await storage.deleteFile(doc.storageKey); }
+    catch (cleanupError) { console.error('Upload rollback failed:', cleanupError); }
+    throw error;
+  }
+};
+
 const formatBytes = (bytes: number): string => {
   if (bytes === 0) return '0 Bytes';
   const k = 1024;
@@ -71,9 +82,11 @@ export const deleteDocument = async (req: Request, res: Response) => {
     }
     
     await processor.cancel(id);
+    // Keep ownership metadata until cleanup finishes, so a failed delete can
+    // be retried. Removing the metadata first would strand processed text.
+    await fs.promises.rm(path.join(config.processedDir, `${id}.txt`), { force: true });
     await storage.deleteFile(doc.storageKey);
     await docRepo.deleteByIdAndUserId(id, userId);
-    await fs.promises.rm(path.join(config.processedDir, `${id}.txt`), { force: true });
     
     // Log activity
     await activityRepo.createEvent({
@@ -125,7 +138,7 @@ export const uploadSingleDocument = async (req: Request, res: Response) => {
       updatedAt: new Date().toISOString(),
     };
     
-    await docRepo.createDocument(doc);
+    await persistUploadedDocument(doc);
     
     // Log activity
     await activityRepo.createEvent({
@@ -183,7 +196,7 @@ export const uploadMultipleDocuments = async (req: Request, res: Response) => {
         updatedAt: new Date().toISOString(),
       };
       
-      await docRepo.createDocument(doc);
+      await persistUploadedDocument(doc);
       uploadedDocs.push(doc);
       
       await activityRepo.createEvent({
@@ -221,6 +234,10 @@ export const retryDocument = async (req: Request, res: Response) => {
     }
     
     if (!['Failed', 'Completed'].includes(doc.status)) return res.status(409).json({ error: 'Document is already being processed' });
+
+    // Acceptance is atomic within this worker process, unlike the earlier
+    // status lookup. Concurrent callers must not log retries that were ignored.
+    if (!await processor.triggerPipeline(doc.id, userId)) return res.status(409).json({ error: 'Document is already being processed' });
     
     // Log activity
     await activityRepo.createEvent({
@@ -236,8 +253,6 @@ export const retryDocument = async (req: Request, res: Response) => {
       createdAt: new Date().toISOString()
     });
 
-    await processor.triggerPipeline(doc.id, userId);
-    
     res.json({ success: true, message: 'Retry initiated' });
   } catch (error) {
     console.error('Error retrying document:', error);

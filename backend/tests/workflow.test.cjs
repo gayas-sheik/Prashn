@@ -23,6 +23,7 @@ before(async () => {
   process.env.UPLOAD_DIR = path.join(run, 'uploads');
   process.env.PROCESSED_DIR = path.join(run, 'processed');
   process.env.OLLAMA_MODEL = '';
+  process.env.JWT_SECRET = require('node:crypto').randomBytes(48).toString('hex');
   extractor = new (require('../dist/processing/local.extractor').LocalExtractor)();
   structured = new (require('../dist/processing/field_extractor').StructuredFieldExtractor)();
   answerer = new (require('../dist/processing/document.answerer').ExtractiveDocumentAnswerer)();

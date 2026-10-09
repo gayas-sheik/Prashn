@@ -1,5 +1,6 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
+process.env.JWT_SECRET = require('node:crypto').randomBytes(48).toString('hex');
 const {resolveDocumentQuestion}=require('../dist/processing/question.language');
 const {ExtractiveDocumentAnswerer,NOT_FOUND}=require('../dist/processing/document.answerer');
 const {StructuredFieldExtractor}=require('../dist/processing/field_extractor');

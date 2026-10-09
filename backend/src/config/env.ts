@@ -5,13 +5,13 @@ dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 const root = path.resolve(__dirname, '../..');
 const resolvePath = (value: string | undefined, fallback: string) => path.resolve(root, value || fallback);
-if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) throw new Error('Set JWT_SECRET before running in production');
+if (!process.env.JWT_SECRET?.trim()) throw new Error('Set a private random JWT_SECRET before running the backend');
 
 export const config = {
   port: process.env.PORT || 5000,
   nodeEnv: process.env.NODE_ENV || 'development',
   corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:5173',
-  jwtSecret: process.env.JWT_SECRET || 'fallback_secret',
+  jwtSecret: process.env.JWT_SECRET,
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
   storageMode: process.env.STORAGE_MODE || 'local',
   databaseMode: process.env.DATABASE_MODE || 'local',

@@ -12,6 +12,7 @@ export class StructuredFieldExtractor {
     const partyRows = new Set<number>();
     const heading = /^(?:invoice(?: no\.?| number| date| id)?|receipt(?: no\.?| number| date)?|(?:due|issue|birth) date|date|state|tax category|place of supply|gst(?: number)?|vehicle number|captain name|customer(?: name| (?:pick up|pickup|billing|shipping) address)?|(?:pick up|pickup|billing|shipping) address|bill(?:ed)? to|bill details|payment summary|total(?: amount)?|sub[ -]?total|from|to|tax|currency|email|phone)\s*[:#]?$/i;
     const validValue = (label: string, value: string) => {
+      if (/^\[[^\]]+\]$/.test(value.trim())) return false;
       if (heading.test(value)) return false;
       if (/\bdate\b/i.test(label)) return /\d/.test(value) && /\d{1,4}[-/.]\d{1,2}[-/.]\d{1,4}|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b/i.test(value);
       if (/^(?:Invoice|Receipt) Number$/.test(label)) return /^[\p{L}\p{N}_/#.-]+$/u.test(value);
@@ -34,6 +35,11 @@ export class StructuredFieldExtractor {
         const match = row.line.match(pattern);
         if (!match) continue;
         const next = rows[index + 1];
+        // An empty value followed by a different labelled field is missing,
+        // not a multiline value (for example Vendor: followed by Notes:).
+        const paymentCells = next?.line.split(/\t+/) || [];
+        const paymentValue = label === 'Payment Method' && paymentCells.length === 2 && AMOUNT.test(paymentCells[1]);
+        if (!match[1].trim() && /[:\t]/.test(next?.line || '') && !paymentValue) continue;
         let value = match[1].trim() || (next?.page === row.page && next.block === row.block ? next.line : '');
         if (!value || !validValue(label, value)) continue;
         let snippet = match[1].trim() ? row.line : `${row.line}\n${value}`;
@@ -153,7 +159,7 @@ export class StructuredFieldExtractor {
       if (partyRows.has(index)) continue;
       const row = rows[index];
       const cells = row.line.split(/\t+/).map(cell => cell.trim());
-      if (cells.length === 2 && /^[\p{L}][\p{L}\p{N} ()/#.%&-]{1,60}$/u.test(cells[0]) && validValue(canonical.get(cells[0].toLowerCase()) || cells[0], cells[1]) && !fields.some(field => field.page === row.page && field.snippet === row.line)) {
+      if (cells.length === 2 && !/^[\p{L}][\p{L}\p{N} ()/#.-]{1,50}:[ \t]*/u.test(cells[1]) && /^[\p{L}][\p{L}\p{N} ()/#.%&-]{1,60}$/u.test(cells[0]) && validValue(canonical.get(cells[0].toLowerCase()) || cells[0], cells[1]) && !fields.some(field => field.page === row.page && field.snippet === row.line)) {
         let label = canonical.get(cells[0].toLowerCase()) || cells[0];
         if (['Total', 'Subtotal', 'Tax', 'Discount', 'Amount Paid'].includes(label) && !AMOUNT.test(cells[1])) {
           if (/^gst$/i.test(cells[0]) && /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z0-9]{10,20}$/.test(cells[1])) label = 'GST Number';
@@ -171,6 +177,7 @@ export class StructuredFieldExtractor {
         add(label, value, { ...row, line: snippet }, 0.85);
       }
       for (const part of row.line.split(/\t+(?=[^:\t]{1,50}:)/)) {
+        if (/^https?:\/\//i.test(part)) continue;
         const match = part.match(/^([\p{L}][\p{L}\p{N} ()/#.-]{1,50}):[ \t]*(\S.*)$/u);
         if (match) {
           const label = canonical.get(match[1].trim().toLowerCase()) || match[1].trim();

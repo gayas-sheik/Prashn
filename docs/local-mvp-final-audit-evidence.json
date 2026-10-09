@@ -1,0 +1,1608 @@
+{
+  "project": "Prashn",
+  "date": "2026-10-09",
+  "timezone": "Asia/Calcutta",
+  "checkout": "Prashn-latest",
+  "baseCommit": "d330c37",
+  "runtime": {
+    "node": "v22.14.0",
+    "platform": "win32"
+  },
+  "backendTests": {
+    "initial": {
+      "passed": 27,
+      "failed": 0
+    },
+    "initialFaults": {
+      "passed": 1,
+      "failed": 6
+    },
+    "intermediate": {
+      "passed": 34,
+      "failed": 1,
+      "cause": "Overstrict missing-value guard rejected valid payment row; corrected"
+    },
+    "final": {
+      "passed": 35,
+      "failed": 0
+    },
+    "rawLog": "backend/.test-output/final-audit-npm-test-final.log"
+  },
+  "frontend": {
+    "build": "passed",
+    "lint": "11 warnings, no errors",
+    "browser": "BLOCKED: no enabled browser; iab unavailable"
+  },
+  "checks": [
+    {
+      "name": "Frontend startup and backend health through Vite proxy",
+      "status": "VERIFIED",
+      "detail": {
+        "status": "ok",
+        "environment": "development",
+        "processingMode": "local",
+        "qaMode": "extractive",
+        "workspace": "Prashn-latest",
+        "extractionVersion": "layout-fields-v2"
+      }
+    },
+    {
+      "name": "Registration, normalized duplicate, input validation, login and account lookup",
+      "status": "VERIFIED",
+      "detail": {
+        "accounts": 2,
+        "bcryptCost": 10
+      }
+    },
+    {
+      "name": "Protected route families reject missing, malformed, expired, wrong-signature and unsigned tokens",
+      "status": "VERIFIED"
+    },
+    {
+      "name": "Single upload persists source bytes, independent metadata, pages, complete text and checksum",
+      "status": "VERIFIED",
+      "detail": {
+        "id": "DOC-0e05134d-c047-4143-acb5-76c2276caa5a",
+        "bytes": 1297,
+        "type": "Invoice"
+      }
+    },
+    {
+      "name": "Mixed batch: invoice, receipt, form, unknown and corrupt PDF finish independently",
+      "status": "VERIFIED",
+      "detail": [
+        {
+          "id": "DOC-728edbb4-e3d2-47e9-bf43-cca7801cb933",
+          "type": "Invoice",
+          "status": "Completed",
+          "failureReason": null
+        },
+        {
+          "id": "DOC-9c1e1f6b-ca59-4028-8c91-7ab461b9ba8f",
+          "type": "Receipt",
+          "status": "Completed",
+          "failureReason": null
+        },
+        {
+          "id": "DOC-496efd26-9ce8-4770-b492-d3fc6955a563",
+          "type": "Form",
+          "status": "Completed",
+          "failureReason": null
+        },
+        {
+          "id": "DOC-e3f661ac-798f-4314-91cd-7454990f7552",
+          "type": "Unknown",
+          "status": "Completed",
+          "failureReason": null
+        },
+        {
+          "id": "DOC-22608497-2423-4581-8d66-ffca16c6a161",
+          "type": "Unknown",
+          "status": "Failed",
+          "failureReason": "Invalid PDF structure."
+        }
+      ]
+    },
+    {
+      "name": "Fields match independently specified vendors, currencies, dates, totals, receipt and form values",
+      "status": "VERIFIED"
+    },
+    {
+      "name": "Account B cannot list, read, download, ask, clear, retry or delete account A documents",
+      "status": "VERIFIED"
+    },
+    {
+      "name": "Document-specific Q&A and refusal: no cross-document total/vendor leakage; persisted pairs",
+      "status": "VERIFIED",
+      "detail": {
+        "firstHistory": 10,
+        "secondHistory": 4
+      }
+    },
+    {
+      "name": "Validation: no file, unsupported type, zero-byte PDF, question limits and malformed JSON",
+      "status": "VERIFIED"
+    },
+    {
+      "name": "Download returns byte-identical original with nosniff/private cache policy",
+      "status": "VERIFIED"
+    },
+    {
+      "name": "Failed retry reaches Failed again; replacing only disposable corrupt source makes retry complete",
+      "status": "VERIFIED",
+      "detail": {
+        "repairedDocument": "DOC-22608497-2423-4581-8d66-ffca16c6a161",
+        "intervention": "Replaced source bytes in isolated storage only"
+      }
+    },
+    {
+      "name": "Concurrent distinct uploads and duplicate retry do not mix results",
+      "status": "VERIFIED",
+      "detail": {
+        "statuses": [
+          409,
+          409,
+          409,
+          200,
+          409
+        ],
+        "retryEvents": 1,
+        "completionsAdded": 1
+      }
+    },
+    {
+      "name": "Document list and live metrics agree with persisted owned records",
+      "status": "VERIFIED",
+      "detail": {
+        "total": 13,
+        "queued": 0,
+        "active": 0,
+        "completed": 12,
+        "failed": 1,
+        "totalBytes": 9709,
+        "concurrency": 2,
+        "maxPages": 100,
+        "maxUploadBytes": 10485760,
+        "storageMode": "local",
+        "ocrEngine": "Tesseract.js",
+        "qaMode": "extractive"
+      }
+    },
+    {
+      "name": "Lifecycle activity reflects upload, work, completion, failure, retry and ownership",
+      "status": "VERIFIED",
+      "detail": {
+        "eventCount": 74
+      }
+    },
+    {
+      "name": "History survives actual backend stop/start and persisted pending work recovers",
+      "status": "VERIFIED",
+      "detail": {
+        "restoredMessages": 10,
+        "recoveredDocument": "DOC-728edbb4-e3d2-47e9-bf43-cca7801cb933"
+      }
+    },
+    {
+      "name": "Logout acknowledgement is stateless: existing JWT remains valid as documented",
+      "status": "VERIFIED",
+      "detail": "Server does not revoke tokens; frontend logout clears local storage (source inspected, browser blocked)."
+    },
+    {
+      "name": "Question clearing persists; deletion removes document, original, extracted text and questions; retains audit events",
+      "status": "VERIFIED",
+      "detail": "Activity events intentionally retained after deletion."
+    }
+  ],
+  "apiRequests": [
+    {
+      "method": "GET",
+      "endpoint": "/health",
+      "account": "anonymous",
+      "status": 200,
+      "bytes": 157
+    },
+    {
+      "method": "POST",
+      "endpoint": "/auth/register",
+      "account": "anonymous",
+      "status": 201,
+      "bytes": 39
+    },
+    {
+      "method": "POST",
+      "endpoint": "/auth/login",
+      "account": "anonymous",
+      "status": 200,
+      "bytes": 390
+    },
+    {
+      "method": "POST",
+      "endpoint": "/auth/register",
+      "account": "anonymous",
+      "status": 201,
+      "bytes": 39
+    },
+    {
+      "method": "POST",
+      "endpoint": "/auth/login",
+      "account": "anonymous",
+      "status": 200,
+      "bytes": 390
+    },
+    {
+      "method": "POST",
+      "endpoint": "/auth/register",
+      "account": "anonymous",
+      "status": 409,
+      "error": "Email already registered",
+      "bytes": 36
+    },
+    {
+      "method": "POST",
+      "endpoint": "/auth/register",
+      "account": "anonymous",
+      "status": 400,
+      "error": "Enter a valid email, full name, and password (8 to 72 bytes)",
+      "bytes": 72
+    },
+    {
+      "method": "POST",
+      "endpoint": "/auth/login",
+      "account": "anonymous",
+      "status": 401,
+      "error": "Invalid credentials",
+      "bytes": 31
+    },
+    {
+      "method": "GET",
+      "endpoint": "/auth/me",
+      "account": "A",
+      "status": 200,
+      "bytes": 123
+    },
+    {
+      "method": "GET",
+      "endpoint": "/auth/me",
+      "account": "anonymous",
+      "status": 401,
+      "error": "Unauthorized",
+      "bytes": 50
+    },
+    {
+      "method": "GET",
+      "endpoint": "/documents",
+      "account": "anonymous",
+      "status": 401,
+      "error": "Unauthorized",
+      "bytes": 50
+    },
+    {
+      "method": "GET",
+      "endpoint": "/activity",
+      "account": "anonymous",
+      "status": 401,
+      "error": "Unauthorized",
+      "bytes": 50
+    },
+    {
+      "method": "GET",
+      "endpoint": "/documents/missing/questions",
+      "account": "anonymous",
+      "status": 401,
+      "error": "Unauthorized",
+      "bytes": 50
+    },
+    {
+      "method": "GET",
+      "endpoint": "/auth/me",
+      "account": "invalid/test",
+      "status": 401,
+      "error": "Unauthorized",
+      "bytes": 50
+    },
+    {
+      "method": "GET",
+      "endpoint": "/documents",
+      "account": "invalid/test",
+      "status": 401,
+      "error": "Unauthorized",
+      "bytes": 50
+    },
+    {
+      "method": "GET",
+      "endpoint": "/activity",
+      "account": "invalid/test",
+      "status": 401,
+      "error": "Unauthorized",
+      "bytes": 50
+    },
+    {
+      "method": "GET",
+      "endpoint": "/documents/missing/questions",
+      "account": "invalid/test",
+      "status": 401,
+      "error": "Unauthorized",
+      "bytes": 50
+    },
+    {
+      "method": "GET",
+      "endpoint": "/auth/me",
+      "account": "invalid/test",
+      "status": 401,
+      "error": "Unauthorized",
+      "bytes": 50
+    },
+    {
+      "method": "GET",
+      "endpoint": "/documents",
+      "account": "invalid/test",
+      "status": 401,
+      "error": "Unauthorized",
+      "bytes": 50
+    },
+    {
+      "method": "GET",
+      "endpoint": "/activity",
+      "account": "invalid/test",
+      "status": 401,
+      "error": "Unauthorized",
+      "bytes": 50
+    },
+    {
+      "method": "GET",
+      "endpoint": "/documents/missing/questions",
+      "account": "invalid/test",
+      "status": 401,
+      "error": "Unauthorized",
+      "bytes": 50
+    },
+    {
+      "method": "GET",
+      "endpoint": "/auth/me",
+      "account": "invalid/test",
+      "status": 401,
+      "error": "Unauthorized",
+      "bytes": 50
+    },
+    {
+      "method": "GET",
+      "endpoint": "/documents",
+      "account": "invalid/test",
+      "status": 401,
+      "error": "Unauthorized",
+      "bytes": 50
+    },
+    {
+      "method": "GET",
+      "endpoint": "/activity",
+      "account": "invalid/test",
+      "status": 401,
+      "error": "Unauthorized",
+      "bytes": 50
+    },
+    {
+      "method": "GET",
+      "endpoint": "/documents/missing/questions",
+      "account": "invalid/test",
+      "status": 401,
+      "error": "Unauthorized",
+      "bytes": 50
+    },
+    {
+      "method": "GET",
+      "endpoint": "/auth/me",
+      "account": "invalid/test",
+      "status": 401,
+      "error": "Unauthorized",
+      "bytes": 50
+    },
+    {
+      "method": "GET",
+      "endpoint": "/documents",
+      "account": "invalid/test",
+      "status": 401,
+      "error": "Unauthorized",
+      "bytes": 50
+    },
+    {
+      "method": "GET",
+      "endpoint": "/activity",
+      "account": "invalid/test",
+      "status": 401,
+      "error": "Unauthorized",
+      "bytes": 50
+    },
+    {
+      "method": "GET",
+      "endpoint": "/documents/missing/questions",
+      "account": "invalid/test",
+      "status": 401,
+      "error": "Unauthorized",
+      "bytes": 50
+    },
+    {
+      "method": "GET",
+      "endpoint": "/documents?token=[redacted]",
+      "account": "anonymous",
+      "status": 401,
+      "error": "Unauthorized",
+      "bytes": 50
+    },
+    {
+      "method": "POST",
+      "endpoint": "/documents/upload",
+      "account": "A",
+      "status": 201,
+      "bytes": 528
+    },
+    {
+      "method": "GET",
+      "endpoint": "/documents/DOC-0e05134d-c047-4143-acb5-76c2276caa5a",
+      "account": "A",
+      "status": 200,
+      "bytes": 638
+    },
+    {
+      "method": "GET",
+      "endpoint": "/documents/DOC-0e05134d-c047-4143-acb5-76c2276caa5a",
+      "account": "A",
+      "status": 200,
+      "bytes": 638
+    },
+    {
+      "method": "GET",
+      "endpoint": "/documents/DOC-0e05134d-c047-4143-acb5-76c2276caa5a",
+      "account": "A",
+      "status": 200,
+      "bytes": 1782
+    },
+    {
+      "method": "POST",
+      "endpoint": "/documents/upload-multiple",
+      "account": "A",
+      "status": 201,
+      "bytes": 2578
+    },
+    {
+      "method": "GET",
+      "endpoint": "/documents/DOC-728edbb4-e3d2-47e9-bf43-cca7801cb933",
+      "account": "A",
+      "status": 200,
+      "bytes": 1654
+    },
+    {
+      "method": "GET",
+      "endpoint": "/documents/DOC-9c1e1f6b-ca59-4028-8c91-7ab461b9ba8f",
+      "account": "A",
+      "status": 200,
+      "bytes": 1647
+    },
+    {
+      "method": "GET",
+      "endpoint": "/documents/DOC-e3f661ac-798f-4314-91cd-7454990f7552",
+      "account": "A",
+      "status": 200,
+      "bytes": 1361
+    },
+    {
+      "method": "GET",
+      "endpoint": "/documents/DOC-496efd26-9ce8-4770-b492-d3fc6955a563",
+      "account": "A",
+      "status": 200,
+      "bytes": 1415
+    },
+    {
+      "method": "GET",
+      "endpoint": "/documents/DOC-22608497-2423-4581-8d66-ffca16c6a161",
+      "account": "A",
+      "status": 200,
+      "bytes": 649
+    },
+    {
+      "method": "GET",
+      "endpoint": "/documents",
+      "account": "B",
+      "status": 200,
+      "bytes": 16
+    },
+    {
+      "method": "GET",
+      "endpoint": "/documents/DOC-0e05134d-c047-4143-acb5-76c2276caa5a",
+      "account": "B",
+      "status": 404,
+      "error": "Document not found",
+      "bytes": 30
+    },
+    {
+      "method": "GET",
+      "endpoint": "/documents/DOC-0e05134d-c047-4143-acb5-76c2276caa5a/file",
+      "account": "B",
+      "status": 404,
+      "error": "Document not found",
+      "bytes": 30
+    },
+    {
+      "method": "GET",
+      "endpoint": "/documents/DOC-0e05134d-c047-4143-acb5-76c2276caa5a/questions",
+      "account": "B",
+      "status": 404,
+      "error": "Document not found",
+      "bytes": 30
+    },
+    {
+      "method": "POST",
+      "endpoint": "/documents/DOC-0e05134d-c047-4143-acb5-76c2276caa5a/questions",
+      "account": "B",
+      "status": 404,
+      "error": "Document not found",
+      "bytes": 30
+    },
+    {
+      "method": "DELETE",
+      "endpoint": "/documents/DOC-0e05134d-c047-4143-acb5-76c2276caa5a/questions",
+      "account": "B",
+      "status": 404,
+      "error": "Document not found",
+      "bytes": 30
+    },
+    {
+      "method": "POST",
+      "endpoint": "/documents/DOC-0e05134d-c047-4143-acb5-76c2276caa5a/retry",
+      "account": "B",
+      "status": 404,
+      "error": "Document not found",
+      "bytes": 30
+    },
+    {
+      "method": "DELETE",
+      "endpoint": "/documents/DOC-0e05134d-c047-4143-acb5-76c2276caa5a",
+      "account": "B",
+      "status": 404,
+      "error": "Document not found",
+      "bytes": 30
+    },
+    {
+      "method": "GET",
+      "endpoint": "/documents/DOC-0e05134d-c047-4143-acb5-76c2276caa5a",
+      "account": "A",
+      "status": 200,
+      "bytes": 1782
+    },
+    {
+      "method": "GET",
+      "endpoint": "/activity",
+      "account": "B",
+      "status": 200,
+      "bytes": 13
+    },
+    {
+      "method": "POST",
+      "endpoint": "/documents/DOC-0e05134d-c047-4143-acb5-76c2276caa5a/questions",
+      "account": "A",
+      "status": 201,
+      "bytes": 468
+    },
+    {
+      "method": "POST",
+      "endpoint": "/documents/DOC-728edbb4-e3d2-47e9-bf43-cca7801cb933/questions",
+      "account": "A",
+      "status": 201,
+      "bytes": 462
+    },
+    {
+      "method": "POST",
+      "endpoint": "/documents/DOC-0e05134d-c047-4143-acb5-76c2276caa5a/questions",
+      "account": "A",
+      "status": 201,
+      "bytes": 498
+    },
+    {
+      "method": "POST",
+      "endpoint": "/documents/DOC-728edbb4-e3d2-47e9-bf43-cca7801cb933/questions",
+      "account": "A",
+      "status": 201,
+      "bytes": 499
+    },
+    {
+      "method": "POST",
+      "endpoint": "/documents/DOC-0e05134d-c047-4143-acb5-76c2276caa5a/questions",
+      "account": "A",
+      "status": 201,
+      "bytes": 483
+    },
+    {
+      "method": "POST",
+      "endpoint": "/documents/DOC-0e05134d-c047-4143-acb5-76c2276caa5a/questions",
+      "account": "A",
+      "status": 201,
+      "bytes": 454
+    },
+    {
+      "method": "POST",
+      "endpoint": "/documents/DOC-0e05134d-c047-4143-acb5-76c2276caa5a/questions",
+      "account": "A",
+      "status": 201,
+      "bytes": 335
+    },
+    {
+      "method": "GET",
+      "endpoint": "/documents/DOC-0e05134d-c047-4143-acb5-76c2276caa5a/questions",
+      "account": "A",
+      "status": 200,
+      "bytes": 3548
+    },
+    {
+      "method": "GET",
+      "endpoint": "/documents/DOC-728edbb4-e3d2-47e9-bf43-cca7801cb933/questions",
+      "account": "A",
+      "status": 200,
+      "bytes": 1488
+    },
+    {
+      "method": "POST",
+      "endpoint": "/documents/upload",
+      "account": "A",
+      "status": 400,
+      "error": "No file uploaded",
+      "bytes": 28
+    },
+    {
+      "method": "POST",
+      "endpoint": "/documents/upload",
+      "account": "A",
+      "status": 415,
+      "error": "Supported formats: PDF, PNG and JPEG",
+      "bytes": 48
+    },
+    {
+      "method": "POST",
+      "endpoint": "/documents/upload",
+      "account": "A",
+      "status": 201,
+      "bytes": 505
+    },
+    {
+      "method": "GET",
+      "endpoint": "/documents/DOC-e872d326-fa4e-4add-8749-d8d9778f19ba",
+      "account": "A",
+      "status": 200,
+      "bytes": 660
+    },
+    {
+      "method": "POST",
+      "endpoint": "/documents/DOC-0e05134d-c047-4143-acb5-76c2276caa5a/questions",
+      "account": "A",
+      "status": 400,
+      "error": "Enter a question between 1 and 4000 characters",
+      "bytes": 58
+    },
+    {
+      "method": "POST",
+      "endpoint": "/documents/DOC-0e05134d-c047-4143-acb5-76c2276caa5a/questions",
+      "account": "A",
+      "status": 400,
+      "error": "Enter a question between 1 and 4000 characters",
+      "bytes": 58
+    },
+    {
+      "method": "POST",
+      "endpoint": "/documents/DOC-0e05134d-c047-4143-acb5-76c2276caa5a/questions",
+      "account": "A",
+      "status": 400,
+      "error": "Enter a question between 1 and 4000 characters",
+      "bytes": 58
+    },
+    {
+      "method": "POST",
+      "endpoint": "/documents/DOC-0e05134d-c047-4143-acb5-76c2276caa5a/questions",
+      "account": "A",
+      "status": 400,
+      "error": "Enter a question between 1 and 4000 characters",
+      "bytes": 58
+    },
+    {
+      "method": "POST",
+      "endpoint": "/documents/DOC-0e05134d-c047-4143-acb5-76c2276caa5a/questions",
+      "account": "A",
+      "status": 400,
+      "error": "Enter a question between 1 and 4000 characters",
+      "bytes": 58
+    },
+    {
+      "method": "POST",
+      "endpoint": "/auth/login",
+      "account": "anonymous",
+      "status": 400,
+      "error": "Expected property name or '}' in JSON at position 1 (line 1 column 2)",
+      "bytes": 81
+    },
+    {
+      "method": "POST",
+      "endpoint": "/documents/DOC-22608497-2423-4581-8d66-ffca16c6a161/questions",
+      "account": "A",
+      "status": 409,
+      "error": "Wait until document processing completes before asking questions",
+      "bytes": 76
+    },
+    {
+      "method": "GET",
+      "endpoint": "/documents/DOC-0e05134d-c047-4143-acb5-76c2276caa5a/file",
+      "account": "A",
+      "status": 200,
+      "bytes": 1297
+    },
+    {
+      "method": "POST",
+      "endpoint": "/documents/DOC-22608497-2423-4581-8d66-ffca16c6a161/retry",
+      "account": "A",
+      "status": 200,
+      "bytes": 44
+    },
+    {
+      "method": "GET",
+      "endpoint": "/documents/DOC-22608497-2423-4581-8d66-ffca16c6a161",
+      "account": "A",
+      "status": 200,
+      "bytes": 649
+    },
+    {
+      "method": "POST",
+      "endpoint": "/documents/DOC-22608497-2423-4581-8d66-ffca16c6a161/retry",
+      "account": "A",
+      "status": 200,
+      "bytes": 44
+    },
+    {
+      "method": "GET",
+      "endpoint": "/documents/DOC-22608497-2423-4581-8d66-ffca16c6a161",
+      "account": "A",
+      "status": 200,
+      "bytes": 633
+    },
+    {
+      "method": "GET",
+      "endpoint": "/documents/DOC-22608497-2423-4581-8d66-ffca16c6a161",
+      "account": "A",
+      "status": 200,
+      "bytes": 1648
+    },
+    {
+      "method": "POST",
+      "endpoint": "/documents/upload",
+      "account": "A",
+      "status": 201,
+      "bytes": 523
+    },
+    {
+      "method": "POST",
+      "endpoint": "/documents/upload",
+      "account": "A",
+      "status": 201,
+      "bytes": 523
+    },
+    {
+      "method": "POST",
+      "endpoint": "/documents/upload",
+      "account": "A",
+      "status": 201,
+      "bytes": 523
+    },
+    {
+      "method": "POST",
+      "endpoint": "/documents/upload",
+      "account": "A",
+      "status": 201,
+      "bytes": 523
+    },
+    {
+      "method": "POST",
+      "endpoint": "/documents/upload",
+      "account": "A",
+      "status": 201,
+      "bytes": 523
+    },
+    {
+      "method": "POST",
+      "endpoint": "/documents/upload",
+      "account": "A",
+      "status": 201,
+      "bytes": 523
+    },
+    {
+      "method": "GET",
+      "endpoint": "/documents/DOC-d921c050-d476-48fe-9d29-987d0177cc2c",
+      "account": "A",
+      "status": 200,
+      "bytes": 1242
+    },
+    {
+      "method": "GET",
+      "endpoint": "/documents/DOC-ebaf32e8-f03b-4a7b-b549-53200cdc3234",
+      "account": "A",
+      "status": 200,
+      "bytes": 1242
+    },
+    {
+      "method": "GET",
+      "endpoint": "/documents/DOC-2a8c43c0-e089-4134-8b35-82c88d7e8e94",
+      "account": "A",
+      "status": 200,
+      "bytes": 1242
+    },
+    {
+      "method": "GET",
+      "endpoint": "/documents/DOC-946d4c45-2644-45fc-a628-e66f7d21e61b",
+      "account": "A",
+      "status": 200,
+      "bytes": 1242
+    },
+    {
+      "method": "GET",
+      "endpoint": "/documents/DOC-a5a27a85-b9f8-4ab9-be93-24e48dc8a0bd",
+      "account": "A",
+      "status": 200,
+      "bytes": 1242
+    },
+    {
+      "method": "GET",
+      "endpoint": "/documents/DOC-011ed581-099e-4e63-8b53-4c3c3460c513",
+      "account": "A",
+      "status": 200,
+      "bytes": 1242
+    },
+    {
+      "method": "POST",
+      "endpoint": "/documents/DOC-0e05134d-c047-4143-acb5-76c2276caa5a/retry",
+      "account": "A",
+      "status": 409,
+      "error": "Document is already being processed",
+      "bytes": 47
+    },
+    {
+      "method": "POST",
+      "endpoint": "/documents/DOC-0e05134d-c047-4143-acb5-76c2276caa5a/retry",
+      "account": "A",
+      "status": 409,
+      "error": "Document is already being processed",
+      "bytes": 47
+    },
+    {
+      "method": "POST",
+      "endpoint": "/documents/DOC-0e05134d-c047-4143-acb5-76c2276caa5a/retry",
+      "account": "A",
+      "status": 409,
+      "error": "Document is already being processed",
+      "bytes": 47
+    },
+    {
+      "method": "POST",
+      "endpoint": "/documents/DOC-0e05134d-c047-4143-acb5-76c2276caa5a/retry",
+      "account": "A",
+      "status": 409,
+      "error": "Document is already being processed",
+      "bytes": 47
+    },
+    {
+      "method": "POST",
+      "endpoint": "/documents/DOC-0e05134d-c047-4143-acb5-76c2276caa5a/retry",
+      "account": "A",
+      "status": 200,
+      "bytes": 44
+    },
+    {
+      "method": "GET",
+      "endpoint": "/documents/DOC-0e05134d-c047-4143-acb5-76c2276caa5a",
+      "account": "A",
+      "status": 200,
+      "bytes": 1784
+    },
+    {
+      "method": "GET",
+      "endpoint": "/documents/DOC-0e05134d-c047-4143-acb5-76c2276caa5a",
+      "account": "A",
+      "status": 200,
+      "bytes": 1782
+    },
+    {
+      "method": "GET",
+      "endpoint": "/documents",
+      "account": "A",
+      "status": 200,
+      "bytes": 17478
+    },
+    {
+      "method": "GET",
+      "endpoint": "/documents/metrics",
+      "account": "A",
+      "status": 200,
+      "bytes": 218
+    },
+    {
+      "method": "GET",
+      "endpoint": "/documents/metrics",
+      "account": "B",
+      "status": 200,
+      "bytes": 213
+    },
+    {
+      "method": "GET",
+      "endpoint": "/activity",
+      "account": "A",
+      "status": 200,
+      "bytes": 28529
+    },
+    {
+      "method": "GET",
+      "endpoint": "/documents/DOC-728edbb4-e3d2-47e9-bf43-cca7801cb933",
+      "account": "A",
+      "status": 200,
+      "bytes": 1656
+    },
+    {
+      "method": "GET",
+      "endpoint": "/documents/DOC-728edbb4-e3d2-47e9-bf43-cca7801cb933",
+      "account": "A",
+      "status": 200,
+      "bytes": 1654
+    },
+    {
+      "method": "GET",
+      "endpoint": "/documents/DOC-0e05134d-c047-4143-acb5-76c2276caa5a/questions",
+      "account": "A",
+      "status": 200,
+      "bytes": 3548
+    },
+    {
+      "method": "POST",
+      "endpoint": "/auth/logout",
+      "account": "A",
+      "status": 200,
+      "bytes": 37
+    },
+    {
+      "method": "GET",
+      "endpoint": "/auth/me",
+      "account": "A",
+      "status": 200,
+      "bytes": 123
+    },
+    {
+      "method": "POST",
+      "endpoint": "/auth/logout",
+      "account": "anonymous",
+      "status": 200,
+      "bytes": 37
+    },
+    {
+      "method": "DELETE",
+      "endpoint": "/documents/DOC-728edbb4-e3d2-47e9-bf43-cca7801cb933/questions",
+      "account": "A",
+      "status": 200,
+      "bytes": 16
+    },
+    {
+      "method": "GET",
+      "endpoint": "/documents/DOC-728edbb4-e3d2-47e9-bf43-cca7801cb933/questions",
+      "account": "A",
+      "status": 200,
+      "bytes": 19
+    },
+    {
+      "method": "DELETE",
+      "endpoint": "/documents/DOC-0e05134d-c047-4143-acb5-76c2276caa5a",
+      "account": "A",
+      "status": 200,
+      "bytes": 45
+    },
+    {
+      "method": "GET",
+      "endpoint": "/documents/DOC-0e05134d-c047-4143-acb5-76c2276caa5a",
+      "account": "A",
+      "status": 404,
+      "error": "Document not found",
+      "bytes": 30
+    },
+    {
+      "method": "GET",
+      "endpoint": "/documents/DOC-728edbb4-e3d2-47e9-bf43-cca7801cb933",
+      "account": "A",
+      "status": 200,
+      "bytes": 1654
+    }
+  ],
+  "database": {
+    "integrity": [
+      {
+        "integrity_check": "ok"
+      }
+    ],
+    "foreignKeyViolations": [],
+    "finalCounts": {
+      "users": 2,
+      "documents": 12,
+      "messages": 0,
+      "events": 79
+    }
+  },
+  "faultsBefore": {
+    "missingSecret": {
+      "development": 0,
+      "production": 1
+    },
+    "registrationRace": [
+      201,
+      500,
+      500,
+      500,
+      500
+    ],
+    "retryRace": {
+      "statuses": [
+        200,
+        200,
+        200,
+        200,
+        200
+      ],
+      "eventsAdded": 5
+    },
+    "emptyVendor": [
+      {
+        "label": "Vendor / Seller",
+        "value": "Notes: Deliver tomorrow",
+        "page": 1,
+        "snippet": "Vendor:\nNotes: Deliver tomorrow",
+        "confidence": 0.9
+      },
+      {
+        "label": "Total",
+        "value": "USD 27.50",
+        "page": 1,
+        "snippet": "Total: USD 27.50",
+        "confidence": 0.9
+      },
+      {
+        "label": "Notes",
+        "value": "Deliver tomorrow",
+        "page": 1,
+        "snippet": "Notes: Deliver tomorrow",
+        "confidence": 0.8
+      }
+    ],
+    "uploadFailure": {
+      "http": 500,
+      "filesBefore": 1,
+      "filesAfter": 2
+    },
+    "deletionFailure": {
+      "http": 500,
+      "recordExists": false,
+      "originalExists": false,
+      "textExists": true
+    },
+    "mimeSpoof": {
+      "upload": 201,
+      "processing": "Failed",
+      "failureReason": "Invalid PDF structure."
+    }
+  },
+  "faultsAfter": {
+    "missingSecret": {
+      "development": 1,
+      "production": 1
+    },
+    "registrationRace": [
+      409,
+      409,
+      409,
+      409,
+      201
+    ],
+    "retryRace": {
+      "statuses": [
+        409,
+        200,
+        409,
+        409,
+        409
+      ],
+      "eventsAdded": 1
+    },
+    "emptyVendor": [
+      {
+        "label": "Total",
+        "value": "USD 27.50",
+        "page": 1,
+        "snippet": "Total: USD 27.50",
+        "confidence": 0.9
+      },
+      {
+        "label": "Notes",
+        "value": "Deliver tomorrow",
+        "page": 1,
+        "snippet": "Notes: Deliver tomorrow",
+        "confidence": 0.8
+      }
+    ],
+    "uploadFailure": {
+      "http": 500,
+      "filesBefore": 2,
+      "filesAfter": 2
+    },
+    "templateColumns": {
+      "fields": [
+        {
+          "label": "Invoice Number",
+          "value": "INV-0001",
+          "page": 1,
+          "snippet": "Invoice No.: INV-0001",
+          "confidence": 0.9
+        },
+        {
+          "label": "Total",
+          "value": "USD 1800.00",
+          "page": 1,
+          "snippet": "Total: USD 1800.00",
+          "confidence": 0.9
+        }
+      ],
+      "dateAnswer": "I couldn't find that information in this document."
+    },
+    "deletionFailure": {
+      "http": 500,
+      "recordExists": true,
+      "originalExists": true,
+      "textExists": true
+    },
+    "mimeSpoof": {
+      "upload": 201,
+      "processing": "Failed",
+      "failureReason": "Invalid PDF structure."
+    }
+  },
+  "evaluation": {
+    "documents": 9,
+    "completed": 9,
+    "classification": 9,
+    "fields": {
+      "correct": 72,
+      "total": 72,
+      "missing": 0,
+      "incorrect": 0
+    },
+    "items": {
+      "correct": 2,
+      "total": 2
+    },
+    "answers": {
+      "correct": 73,
+      "total": 73
+    },
+    "citations": {
+      "correct": 61,
+      "total": 61
+    },
+    "refusals": {
+      "correct": 12,
+      "total": 12
+    },
+    "fullyCorrect": {
+      "correct": 73,
+      "total": 73
+    }
+  },
+  "evidenceDirectories": {
+    "acceptance": "backend/.test-output/final-audit-ysgzYv",
+    "faultsAfter": "backend/.test-output/final-audit-faults-RvID19",
+    "faultsBefore": "backend/.test-output/final-audit-faults-I8Q40O"
+  },
+  "normalApplication": {
+    "backendHealth": {
+      "status": "ok",
+      "environment": "development",
+      "processingMode": "local",
+      "qaMode": "extractive",
+      "workspace": "Prashn-latest",
+      "extractionVersion": "layout-fields-v2"
+    },
+    "frontendProxyHealth": {
+      "status": "ok",
+      "environment": "development",
+      "processingMode": "local",
+      "qaMode": "extractive",
+      "workspace": "Prashn-latest",
+      "extractionVersion": "layout-fields-v2"
+    },
+    "configurationChange": "Ignored local environment previously had no signing secret; generated 48 random bytes, never displayed. Old fallback-signed sessions require login."
+  },
+  "realDocumentReview": {
+    "template": {
+      "pagesExtracted": 10,
+      "pagesVisuallyGraded": [
+        1
+      ],
+      "finalFields": 8,
+      "selectedInvoiceTotalVendorValues": "matched rendered source",
+      "printedDatePlaceholder": "refused after repair",
+      "unlabeledCustomerBlock": "not recovered",
+      "originalChecksum": "unchanged",
+      "privateOutput": "ignored locally"
+    },
+    "rideInvoice": {
+      "pagesExtracted": 3,
+      "pagesVisuallyGraded": [
+        1,
+        2,
+        3
+      ],
+      "finalFields": 35,
+      "selectedIdentifiersDatesCustomerPaymentTotalValues": "matched rendered source",
+      "unlabeledVendorHeading": "not recovered",
+      "originalChecksum": "unchanged",
+      "privateOutput": "ignored locally"
+    }
+  },
+  "sourceInventory": [
+    {
+      "file": "backend/package-lock.json",
+      "sha256": "ab7337c38714cccd5e214f609a23d9254e920cd7a78fa28ead4fcb80ddfd790c"
+    },
+    {
+      "file": "backend/package.json",
+      "sha256": "e67c84b4cddf016962ad4f2cd38ca22a6d0943fa44c8cbbb7c8741a73e6ba154"
+    },
+    {
+      "file": "backend/src/app.ts",
+      "sha256": "996a39ba9a56dd15760ff5707c11277e942b24a56277737e34ad659b267a21de"
+    },
+    {
+      "file": "backend/src/config/env.ts",
+      "sha256": "e110bf1efa2ce061ef053f11ce139f8111c15f8538fef9931aeb50792987e408"
+    },
+    {
+      "file": "backend/src/controllers/activity.controller.ts",
+      "sha256": "7e2b7c4ba44ade7906aef536f6269074ba31e4b8b011b63e2c3c3e70da8d7629"
+    },
+    {
+      "file": "backend/src/controllers/auth.controller.ts",
+      "sha256": "bbc14fae1a68d557eecd413c010526765c48ff6515da842a408d385af70bc3fd"
+    },
+    {
+      "file": "backend/src/controllers/document.controller.ts",
+      "sha256": "0d6f4870b852f3834ff7cfe6dbfed9970464091e5d2ea5d1b332ace5f3980a11"
+    },
+    {
+      "file": "backend/src/controllers/question.controller.ts",
+      "sha256": "17f5f0aadb93edfd5ad5f21b94fa3dac3012ed33545172cfcd5b75b22a61306a"
+    },
+    {
+      "file": "backend/src/database/db.ts",
+      "sha256": "e4768b29a90df26f4961d24c3645c4e224170760014a57946387c1a1113841ce"
+    },
+    {
+      "file": "backend/src/middleware/auth.middleware.ts",
+      "sha256": "cd61e89590fb60d9d2514dc5a5cab4723d52a3e745cb5dd1b104b5c4330c7ecd"
+    },
+    {
+      "file": "backend/src/middleware/upload.middleware.ts",
+      "sha256": "18b197a13e342e7cc197b4e7f872625dc134041ed245660438c330152b4ee2e4"
+    },
+    {
+      "file": "backend/src/processing/classifier.interface.ts",
+      "sha256": "1000e65f869b9f48e982230dbb848ad0d533f45b3ac13d0f9afc59c4aa5e7e41"
+    },
+    {
+      "file": "backend/src/processing/document.answerer.ts",
+      "sha256": "3363947b6f8b321ed3ee98210edc673f390d5050713786f373765d90481b7fa6"
+    },
+    {
+      "file": "backend/src/processing/extractor.interface.ts",
+      "sha256": "4ebc13b433a36584eb677c0fd8246ea06b27765670232feb9106a9a59d557ce6"
+    },
+    {
+      "file": "backend/src/processing/field_extractor.ts",
+      "sha256": "98a5087f084651f50cb4c6904e5f7f54323cf91dbc6bdf12d213460569b19908"
+    },
+    {
+      "file": "backend/src/processing/local.classifier.ts",
+      "sha256": "a93cae9ae2f3b60eb7db6d13a8a7985889f35b885e6eed888c7335ef4d8ef94d"
+    },
+    {
+      "file": "backend/src/processing/local.extractor.ts",
+      "sha256": "1f55b840e6ef1e83e25e5d05f613d1f9bc496bf3a521a1f89c46532dcc7e050d"
+    },
+    {
+      "file": "backend/src/processing/pdf.layout.ts",
+      "sha256": "ee48c49d275f47146be2bc5b6f1710b8720c10eb4d49da4806aa6dba55301414"
+    },
+    {
+      "file": "backend/src/processing/processor.ts",
+      "sha256": "f14c03f0d9bed1ab2cb4d876441f4d2ba50c2d7b8e8bc51bae73e57ddfbe94f2"
+    },
+    {
+      "file": "backend/src/processing/question.language.ts",
+      "sha256": "f961b64c56d115af7faccf462d2465049410134bce314ffc15770b47f1d906c1"
+    },
+    {
+      "file": "backend/src/repositories/activity.repository.ts",
+      "sha256": "4509a9cb900f8695f7f3e7a221f21ce56de73db30276f0c6c0dfb70f929f8a58"
+    },
+    {
+      "file": "backend/src/repositories/document.repository.ts",
+      "sha256": "fa5d3d05cb396c6a5da3ecbdb642793f5ac5e9e9bcb52d247ab646276af07504"
+    },
+    {
+      "file": "backend/src/repositories/question.repository.ts",
+      "sha256": "fcb028da1febf7994ef78f72f3570baec07fba4338bcb2287f7a499d02905ef5"
+    },
+    {
+      "file": "backend/src/repositories/user.repository.ts",
+      "sha256": "46eb824b1f6e1e65f1dd60b3114b132ac6c47f4dfb079e67bbbab3c3121c96e9"
+    },
+    {
+      "file": "backend/src/routes/activity.routes.ts",
+      "sha256": "68b088361f47534cdcbf90ae2c0bf56b0a76c08100b930c3b88852ad40fa605c"
+    },
+    {
+      "file": "backend/src/routes/auth.routes.ts",
+      "sha256": "89e9df06c967d51cd15353d626fb70a4f865549965fef46208c4af9896bd1cfe"
+    },
+    {
+      "file": "backend/src/routes/document.routes.ts",
+      "sha256": "be823de84f1e9972d1508e580ffde078dbc39cd73cc3e1cee148ff37304e1f7c"
+    },
+    {
+      "file": "backend/src/routes/question.routes.ts",
+      "sha256": "5c14211373b328a7bd0ef8cc8afa5bf297adcda261e3accacdd7f9f0f3e499cb"
+    },
+    {
+      "file": "backend/src/server.ts",
+      "sha256": "f5b726d15878a06f2d5901a3d3aeb84929fd2f232ce3a9571ed93f58231c6fba"
+    },
+    {
+      "file": "backend/src/storage/local.storage.ts",
+      "sha256": "4da90fa596076e2cace7e04779230b20411990c907b056ef8ccbff142ed13f08"
+    },
+    {
+      "file": "backend/src/storage/storage.factory.ts",
+      "sha256": "93e655c7f8078b917b4c9f6a84c98f6414e8af32c5fe77d1bcaee272fa5d4efe"
+    },
+    {
+      "file": "backend/src/storage/storage.interface.ts",
+      "sha256": "dff34b490bafb31a538df364984be613057483277d327cbaa439395c9d68b81a"
+    },
+    {
+      "file": "backend/src/types/activity.types.ts",
+      "sha256": "003a7ec0dcd19bcf30b28e3ba09f893294c2aebe98070fce9f46ac898d90534a"
+    },
+    {
+      "file": "backend/src/types/document.types.ts",
+      "sha256": "0bef8bbf44a8605f8b87bbe6edb8e85842cf79d1ff7e011f985690614c8b9817"
+    },
+    {
+      "file": "backend/src/types/index.ts",
+      "sha256": "c0c55a618ec07600134f86366c75da9c7b2609f6764319fc4bc18b671ee07905"
+    },
+    {
+      "file": "backend/src/types/pdfjs.d.ts",
+      "sha256": "52932fdf54afd0e79dbc0520656c22ad506a1ad44c0398b2cd7044efd0f69b3e"
+    },
+    {
+      "file": "backend/src/types/question.types.ts",
+      "sha256": "db367ae63ad59092b6e79ddb43774dc5ba2db1ecc4427c96262e3bd0a8c15df9"
+    },
+    {
+      "file": "backend/src/types/user.types.ts",
+      "sha256": "b230c57aabb4320df43f9d43428f0252a3c394b4a8710c127599e0ec5858a356"
+    },
+    {
+      "file": "backend/tests/evaluation/README.md",
+      "sha256": "022a88859f2b66761949e8911b65a55c94ec83427ccd981d4de28afed23cd1a4"
+    },
+    {
+      "file": "backend/tests/evaluation/generate.py",
+      "sha256": "76e956e407588414ffa54572a4dcffc2ec7049aa70ee861fce7791394a375a58"
+    },
+    {
+      "file": "backend/tests/evaluation/render.cjs",
+      "sha256": "5ed6969bb688b8179ccdd8d3bf354a8107130110acf803fa72140a9a14c13697"
+    },
+    {
+      "file": "backend/tests/evaluation/run.cjs",
+      "sha256": "286fee092a037549171457062e9a80ba4309d446e7f8e38b4c31e50016a54d9b"
+    },
+    {
+      "file": "backend/tests/final-audit-faults.cjs",
+      "sha256": "5cf2d527eb8d916eed674826e055a29944d124ccfe3ed6f0f8da6211caf222ea"
+    },
+    {
+      "file": "backend/tests/final-audit-real.cjs",
+      "sha256": "45d8efb48612745dc4733b5fad5828c6b279c28c25469c977644c4992aa63f78"
+    },
+    {
+      "file": "backend/tests/final-audit-summarize.cjs",
+      "sha256": "7f7e46276560e916a96f8c1a46cf787d0e8f823cf05076314609205746b708e3"
+    },
+    {
+      "file": "backend/tests/final-audit.cjs",
+      "sha256": "c2c07dafde7a7e9fdc0ee8e1e399236e85762ced4a79c14810a2ecf0b3ef9cbf"
+    },
+    {
+      "file": "backend/tests/fixtures.cjs",
+      "sha256": "00ac23d31ba9433362ad90ee02c4fffa14eaef9313754702d0f1dc680a3fa46c"
+    },
+    {
+      "file": "backend/tests/question-language.test.cjs",
+      "sha256": "da64d8c033cabca5405e13e0e9d53c3a693895a9d989b7dbf3eae41d0b34a0ce"
+    },
+    {
+      "file": "backend/tests/workflow.test.cjs",
+      "sha256": "ee76649d4ba4890a242122238c23d63a23401e9dc8375ea323d3b2852301f992"
+    },
+    {
+      "file": "package-lock.json",
+      "sha256": "1b47c88b6f49c697b3d6b494e06b42af0aff8785055652c13538b0f36a94a4d7"
+    },
+    {
+      "file": "package.json",
+      "sha256": "257cc337f3928209dd328d0f1fc3b22c68c887b9cfa9180eedad6b1fccf35e97"
+    },
+    {
+      "file": "src/App.css",
+      "sha256": "c2571ce7245629994b8adc84f6c48e1920f047a4e7e29c89a4aeb51eeb1b5433"
+    },
+    {
+      "file": "src/App.tsx",
+      "sha256": "09dc708566d0b498685ec6f5efe4f95219109fe4efcb8a2957e60ce37db815f4"
+    },
+    {
+      "file": "src/assets/hero.png",
+      "sha256": "881ffbcaafc212e49addad08846a5b82761355fa20624253af3477ba33262c5c"
+    },
+    {
+      "file": "src/assets/react.svg",
+      "sha256": "35ef61ed53b323ae94a16a8ec659b3d0af3880698791133f23b084085ab1c2e5"
+    },
+    {
+      "file": "src/assets/vite.svg",
+      "sha256": "2f1f6c6f90a0ef7422cbb4cfafcd8ad329c507a18afdc34cc21fa72179b9c54a"
+    },
+    {
+      "file": "src/components/dashboard/LiveActivityFeed.tsx",
+      "sha256": "c9cd24dfe1d1619877292614e281ada4e262cfd7680be33050a825c63f12d860"
+    },
+    {
+      "file": "src/components/dashboard/MetricCards.tsx",
+      "sha256": "45653f42c9c4d96186155f74f5170da014fbdff7564041edfc73a792ec6fbad9"
+    },
+    {
+      "file": "src/components/dashboard/PipelineHealthCard.tsx",
+      "sha256": "a7b93c861cafc2f7e3cb0879ac956a8d0a38cd45f918a5be386992c26a490c64"
+    },
+    {
+      "file": "src/components/documents/DocumentPreviewDrawer.tsx",
+      "sha256": "3ced3b22dedf64688e01e8a1504b5bc71d280950cd634d32515ebf9ed45abf7e"
+    },
+    {
+      "file": "src/components/documents/DocumentTable.tsx",
+      "sha256": "0d5539e66831adb1a3cb5c7f0768c1baaed703c9733f6062326b4594db043ffe"
+    },
+    {
+      "file": "src/components/documents/OriginalDocumentPreview.tsx",
+      "sha256": "35bffcb14020b44078fa9cb40217d40863320210250b5428ddf2c52e34641c35"
+    },
+    {
+      "file": "src/components/layout/AppLayout.tsx",
+      "sha256": "1ff125cd1cda73287e9db363210c448ccce631f767ff3e2a3f734b1cfc64e0b8"
+    },
+    {
+      "file": "src/components/layout/MobileNav.tsx",
+      "sha256": "6758a340874b8adba6c1d99e2cff9c48d0d574249cdce8ef33c27848bad6a1f7"
+    },
+    {
+      "file": "src/components/layout/Sidebar.tsx",
+      "sha256": "680ec7ed735ee4eff866ae7927f5d0d927cf63b5f8c05c5e8aa99477f8b8b9c8"
+    },
+    {
+      "file": "src/components/layout/TopNav.tsx",
+      "sha256": "3f3463cc41bbec58ee9b3837da307944706044740d9e16f1cc24cd32cdeb8936"
+    },
+    {
+      "file": "src/components/ui/Badge.tsx",
+      "sha256": "06dd901863efe8b1cf0214fccd13834d54c83da5965094fa80a7c27ba074e54d"
+    },
+    {
+      "file": "src/components/ui/Button.tsx",
+      "sha256": "9497cc581d0dfdd7a4e7ed819a5241f90da0a33d7eca6808e490657a67d69829"
+    },
+    {
+      "file": "src/components/ui/Card.tsx",
+      "sha256": "7dc53ea1824c71ae8313052cc3acd6614db4e4fa7b5b5f88c297e55b75f2e95d"
+    },
+    {
+      "file": "src/components/ui/MessageText.tsx",
+      "sha256": "36b94913f4553071e1fd6913b26df8ed327cc5751fc9036b460bebfce5abbca4"
+    },
+    {
+      "file": "src/context/AuthContext.tsx",
+      "sha256": "59e33deb4841b5aa1327836aafd0951f83032c5ffe93af992eb58c6b28cfdba5"
+    },
+    {
+      "file": "src/context/ThemeContext.tsx",
+      "sha256": "d2824d60479ac6af2aea1791b903610ed6f761b15c4ace0400ebea60d77358fe"
+    },
+    {
+      "file": "src/index.css",
+      "sha256": "844f3b3463e0e3beda0863d62d7f1128418feba183197173ef3f4b421806d3dc"
+    },
+    {
+      "file": "src/main.tsx",
+      "sha256": "484f93f3048565a86a47e308f5a12ee27aa12f5291f3b52a4bb5dc03d887dbc7"
+    },
+    {
+      "file": "src/pages/Activity/ActivityPage.tsx",
+      "sha256": "1a428eb372c4e7fdb599f438d836517aa081017409d9a8dab31317f6ac0e3bef"
+    },
+    {
+      "file": "src/pages/Dashboard/DashboardPage.tsx",
+      "sha256": "e4c1749bf926965ab9e5053f484a1b5d9512a918a2ad1088b1d728c83635c3f9"
+    },
+    {
+      "file": "src/pages/DocumentDetails/DocumentDetailsPage.tsx",
+      "sha256": "9a4a93c507b883c675bf2faf6290626ed8bc083a5a46ea5a757b6bdf3f0cd60a"
+    },
+    {
+      "file": "src/pages/DocumentQA/DocumentQAPage.tsx",
+      "sha256": "3f617670fd6a2a75cd4a74570e44b176bb525893d98b38ec2df3b0a0e64f4fe8"
+    },
+    {
+      "file": "src/pages/Documents/DocumentsPage.tsx",
+      "sha256": "24489ef67b2d1d6f2cc4d9251d2b45b12e589256e774421a02a4833f2e97b162"
+    },
+    {
+      "file": "src/pages/Login/LoginPage.tsx",
+      "sha256": "5cef0a3db408d4b440d5312a40be210e10d8bc22f68a54bbf186f5e5434286e6"
+    },
+    {
+      "file": "src/pages/Processing/ProcessingPage.tsx",
+      "sha256": "72beb2044211b0c83cdf63ec3020beb1b52944de4ce0ff09e00d58ad094f4b49"
+    },
+    {
+      "file": "src/pages/Settings/SettingsPage.tsx",
+      "sha256": "5da44a9b775bc7c37778a85c0ed8e73e1b2e3bd147c3e456f21c25588e9e826a"
+    },
+    {
+      "file": "src/pages/Upload/UploadPage.tsx",
+      "sha256": "61842c5e5d65034d6dbe7224b915f6e7a100f8f2f0c377549d433e1fd4d20377"
+    },
+    {
+      "file": "src/routes/AppRoutes.tsx",
+      "sha256": "015738d0f9d5a7b824b6572f0e0fd563caa4304d3aa848d6d351ba5064c41895"
+    },
+    {
+      "file": "src/services/api/apiClient.ts",
+      "sha256": "285f2e1127b08b567753e843dcfdcefcab487f6a1a1f4bd0ddcf3585028bc00c"
+    },
+    {
+      "file": "src/services/api/documentService.ts",
+      "sha256": "b4925ddce1f9a91eb88acf4636181f820568e25b5b4f66bd372061a197fa37a6"
+    },
+    {
+      "file": "src/services/uploadValidation.ts",
+      "sha256": "42a23f6be5f2eaddac1106d69e56c4e65b769593101ea9fcb510fd00fb23cb56"
+    },
+    {
+      "file": "src/types/index.ts",
+      "sha256": "83fc0ac8c62c3f0429ce3a5d846f447423632d99d095a0d68f27c5f546b610f2"
+    },
+    {
+      "file": "src/vite-env.d.ts",
+      "sha256": "65996936fbb042915f7b74a200fcdde7e410f32a669b1ab9597cfaa4b0faddb5"
+    },
+    {
+      "file": "vite.config.ts",
+      "sha256": "32ae9b1262e207bc9b3f7c47b164aafd656c2060a7354de2e15d6871fcf3befa"
+    }
+  ]
+}

@@ -15,6 +15,7 @@ import { getActivityEvents } from '../../services/api/documentService';
 export const ActivityPage: React.FC = () => {
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedEventType, setSelectedEventType] = useState('All');
   const [selectedStatus, setSelectedStatus] = useState('All');
@@ -27,8 +28,9 @@ export const ActivityPage: React.FC = () => {
       try {
         const data = await getActivityEvents();
         setEvents(data);
+        setError('');
       } catch (err) {
-        console.error("Failed to load events", err);
+        setError(err instanceof Error ? err.message : 'Unable to load activity');
       } finally {
         setLoading(false);
       }
@@ -99,6 +101,7 @@ export const ActivityPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-[#E2E8F0] dark:border-[#334155]">
         <div>

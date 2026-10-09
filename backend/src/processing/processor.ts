@@ -20,12 +20,13 @@ export class DocumentProcessor {
   private active = new Map<string, Promise<void>>();
   private cancelled = new Set<string>();
 
-  async triggerPipeline(id: string, userId: string): Promise<void> {
-    if (this.pending.has(id)) return;
+  async triggerPipeline(id: string, userId: string): Promise<boolean> {
+    if (this.pending.has(id)) return false;
     this.pending.add(id);
     try {
       await documents.updateDocument({ id, status: 'Queued', failureReason: null });
       this.queued.push({ id, userId }); this.drain();
+      return true;
     } catch (error) { this.pending.delete(id); throw error; }
   }
 

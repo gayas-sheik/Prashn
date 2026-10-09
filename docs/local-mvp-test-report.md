@@ -1,4 +1,4 @@
-# Local application validation
+# Prashn local application validation
 
 Date: 2026-10-09. Base: upstream `a15b25b` in the fresh `Prashn-latest` checkout. Runtime: Windows, Node 22.14, SQLite, local storage, pdf-parse 2.4.5 and Tesseract.js 7. Ollama and AWS are not enabled.
 
@@ -88,3 +88,29 @@ A subsequent 9 October 2026 pass used nine new fictional PDFs, 72 expected field
 Brave browser testing now covers single-upload automatic navigation, mixed-success batch results, retry of a corrupt PDF, original PDF preview, typed Q&A, persisted long-history scrolling, mobile navigation/upload layouts at 390 x 844 CSS pixels, and automatic logout after token expiry. The mobile header and staging actions were repaired; fabricated navigation badges and cloud/certification claims were removed. Frontend build passes and lint has 11 advisory warnings with no errors.
 
 See [the full synthetic evaluation and browser report](synthetic-evaluation-report.md) for grading definitions, observations, reproduction instructions and limits. This is a synthetic development benchmark, not an independent holdout or a claim of perfect real-document accuracy. Original user records were not reprocessed in this pass.
+
+## Final independent local MVP audit - 9 October 2026
+
+This entry records a new run against `Prashn-latest` based on `d330c37` and the subsequent local repairs. Earlier counts and browser claims above are historical; they are not a substitute for this pass. See [the final audit](local-mvp-final-audit.md) and [sanitized execution evidence](local-mvp-final-audit-evidence.json) for scope, endpoints, source hashes, limitations and the verdict.
+
+The original suite passed 27/27. New isolated fault tests initially passed 1/7 and failed 6/7: development accepted a missing signing secret, simultaneous duplicate registration returned 500, simultaneous retries produced duplicate acknowledgements/activity, a blank vendor consumed a Notes field, a failed metadata insert left an inaccessible original, and failed processed-text deletion happened after removal of its database record/original. Those defects were repaired and rerun. Read-only review of a real template also exposed incorrect column associations, date placeholders and URL footer fields; an eighth regression covers those cases.
+
+An intermediate full suite passed 34/35 because the new missing-field guard also rejected a valid payment-method/amount row. The guard was narrowed, that failure was retained in the raw log, and the final `npm test` run passed **35/35** with zero skips/failures. Tests now provide random local signing secrets; the normal suite includes `final-audit-faults.cjs`.
+
+`npm run audit:local` passed **17/17** independent checks with separately launched backend/Vite servers, an isolated SQLite database and disposable accounts/storage. It recorded 110 HTTP observations. Checks include missing/malformed/expired/wrong-signature/unsigned tokens, two-user isolation across every document operation, independently specified invoice vendors/currencies/totals, a mixed batch with corrupt input, six concurrent distinct uploads, persisted Q&A across an actual backend stop/start, recovery of a persisted pending record, failure/retry, original bytes and complete text, live metrics, conversation clearing and deletion. Five concurrent retries now produce one 200, four 409 responses and one accepted retry event/job. SQLite integrity was `ok`, with no foreign-key violations in the audit database.
+
+The final `npm run evaluate` reproduced **9/9 completed and correctly classified documents, 72/72 expected fields, 2/2 line items, 73/73 Q&A checks, 61/61 positive citations and 12/12 refusals**. This benchmark checks expected-field correctness/recall, not the precision of all extra emitted fields or arbitrary-document accuracy. Local OCR is implemented and was exercised with English image/scanned/rotated/mixed-page fixtures.
+
+Two existing PDFs were rendered/extracted read-only before and after the repairs. The invoice-bearing first page of a ten-page browser-printed template and all three pages of a real ride/tax invoice were visually compared with selected results. Original checksums stayed identical. The template's blank date now refuses and false customer/URL associations are removed. Unlabeled company/customer blocks and general component-tax aggregation still have documented coverage limits. Private source contents/renderings remain in ignored output; existing records were not manually reprocessed or deleted.
+
+The existing Activity and Processing screens now show request failures; Processing catches retry errors; the dashboard activity card handles loading/empty/error states and refreshes its real API data. These changes preserve the existing layout/design. Final frontend `npm run build` and `npm run lint` both exit 0; lint retains **11 warnings and no errors**.
+
+Current interactive browser verification is **BLOCKED**: the connector returned no enabled browsers and the in-app browser was unavailable. The earlier Brave pass was not reproduced here. HTTP serving/proxy checks and builds cannot verify visual layout, upload navigation, scrolling, responsive behavior, theme rendering or absence of browser-console errors.
+
+The new guard correctly refuses a missing signing secret in both development and production. It exposed that the normal local environment had been relying on the insecure fallback. A random secret was added only to the ignored `backend/.env`, without displaying it, and the existing watcher restarted successfully. Direct backend health on 5000 and normal frontend proxy health on 5173 both returned 200 afterward; audit-only servers on 5057/5177 were stopped. Old sessions require a fresh login. No AWS resources or credentials were introduced.
+
+**Verdict: PASS WITH LIMITATIONS** for the exercised local API/processing baseline. Full frontend acceptance remains blocked; partial storage/database failure recovery, production security controls and portable/distributed AWS adapters remain unfinished. This entry does not declare the entire project complete or cloud-deployment-ready.
+
+### Authorized Brave follow-up - 9 October 2026
+
+After authorization to proceed with Brave, browser discovery still returned no apps or browsers. Explicitly opening the local application with browser ID `brave` returned `Browser is not available: brave`. No additional UI test ran. Browser acceptance remains BLOCKED pending browser access; this result does not demonstrate an application compatibility failure.

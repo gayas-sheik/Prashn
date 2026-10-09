@@ -36,6 +36,7 @@ An ID image or PDF can undergo the same text extraction and supported field matc
 - [Optional AWS deployment](docs/aws-architecture.md): hosting choices and a proposed managed-service migration, with prerequisites and implementation gaps clearly identified.
 - [Evaluation and browser verification](docs/synthetic-evaluation-report.md): before/after measurements, tested browser flows and verification limits.
 - [Earlier validation history](docs/local-mvp-test-report.md): repair history and regression coverage.
+- [Final local MVP audit](docs/local-mvp-final-audit.md): independent acceptance evidence, repairs, remaining limitations and migration readiness.
 - [Contributor instructions](AGENTS.md): development conventions and data-preservation rules.
 
 ## Quick start
@@ -110,7 +111,7 @@ npm run evaluate
 
 The benchmark requires Python with reportlab and Pillow, plus the Windows Arial font used by the generator. See [evaluation instructions](backend/tests/evaluation/README.md).
 
-Recorded on 9 October 2026: 24 backend regression cases passed; the nine-document synthetic benchmark passed 72 expected-field checks and 73 Q&A checks, including 61 positive citation checks and 12 missing-evidence refusals. Frontend builds passed; lint reported 11 advisory warnings and no errors. Brave checks covered uploads, batch results, retries, preview, chat scrolling, an emulated mobile layout and session expiry.
+Latest independent audit on 9 October 2026: 35 backend regression cases and 17 separate acceptance checks passed; the nine-document synthetic benchmark passed 72 expected-field checks and 73 Q&A checks, including 61 positive citation checks and 12 missing-evidence refusals. Frontend build and lint passed; lint reported 11 warnings and no errors. Interactive browser verification was blocked in this pass. Earlier Brave observations are preserved in the evaluation report and were not independently repeated here.
 
 These are results for the tested fixtures and flows, not an estimate of accuracy on arbitrary real documents. Runtime databases, private uploads and generated test artifacts remain ignored.
 

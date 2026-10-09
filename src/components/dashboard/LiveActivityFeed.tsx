@@ -7,13 +7,22 @@ import type { ActivityEvent } from '../../types';
 
 export const LiveActivityFeed: React.FC = () => {
   const [activities, setActivities] = useState<ActivityEvent[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
+    let disposed = false;
     const loadEvents = async () => {
-      const data = await getActivityEvents();
-      setActivities(data.slice(0, 5)); // show latest 5
+      try {
+        const data = await getActivityEvents();
+        if (!disposed) { setActivities(data.slice(0, 5)); setError(''); }
+      } catch (err) {
+        if (!disposed) setError(err instanceof Error ? err.message : 'Unable to load activity');
+      } finally { if (!disposed) setLoading(false); }
     };
-    loadEvents();
+    void loadEvents();
+    const timer = setInterval(loadEvents, 3000);
+    return () => { disposed = true; clearInterval(timer); };
   }, []);
 
   const getIconAndColor = (status: string) => {
@@ -35,7 +44,7 @@ export const LiveActivityFeed: React.FC = () => {
       title={
         <div className="flex items-center gap-2">
           <Activity className="w-4 h-4 text-[#1E40AF] dark:text-[#60A5FA]" />
-          <span>Live Cloud Activity</span>
+          <span>Live Activity</span>
         </div>
       }
       subtitle="Live local document processing events"
@@ -49,6 +58,9 @@ export const LiveActivityFeed: React.FC = () => {
       }
     >
       <div className="space-y-3">
+        {error && <p role="alert" className="text-xs text-red-600">{error}</p>}
+        {loading && <p role="status" className="text-xs text-[#64748B]">Loading activity...</p>}
+        {!loading && !error && !activities.length && <p className="text-xs text-[#64748B]">No activity yet.</p>}
         {activities.map((a) => {
           const { icon: Icon, color } = getIconAndColor(a.status);
           return (

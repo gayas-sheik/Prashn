@@ -135,6 +135,7 @@ export class ExtractiveDocumentAnswerer implements DocumentAnswerer {
     const duration = query.match(/^how long is (?:the )?([\p{L}\s]+)$/u)?.[1]?.trim();
     const durationWords = duration ? words(duration) : [];
     const matched = passages.filter(passage => {
+      if (/\[(?:date|name|amount|total|phone|email|address)\]/i.test(passage.text)) return false;
       const passageWords = words(passage.text);
       if (duration) return durationWords.length && durationWords.every(word => passageWords.includes(word)) && /\b(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirty)\s+(?:business\s+)?(?:days?|weeks?|months?|years?|hours?)\b/i.test(passage.text);
       // A heading that only repeats the requested attribute contains no answer.
