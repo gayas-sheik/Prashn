@@ -12,6 +12,7 @@ export PATH="/opt/node/bin:$PATH"
 id prashn >/dev/null 2>&1 || useradd --system --create-home --home-dir /var/lib/prashn prashn
 cd /opt/prashn/backend
 npm ci --omit=dev
+bash /opt/prashn/infra/verify-native.sh .
 python3 - <<'PY'
 import os, subprocess
 secret=subprocess.check_output(['aws','ssm','get-parameter','--name',os.environ['JWT_PARAMETER'],'--with-decryption','--query','Parameter.Value','--output','text','--region',os.environ['AWS_REGION']],text=True).strip()

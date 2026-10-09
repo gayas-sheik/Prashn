@@ -58,8 +58,25 @@ Infrastructure lint initially found a missing VPC-link name and an invalid IAM `
 | SQS workers, retry, leases and recovery | IMPLEMENTED | TESTED; inspected duplicate, fault, heartbeat and deletion cases | BLOCKED pending rollout |
 | Automatic API/worker scaling | IMPLEMENTED in template | TESTED by schema validation only | BLOCKED; no live scaling event executed |
 | CloudWatch logs/metrics/alarms | IMPLEMENTED in bootstrap/template | TESTED by source/schema review only | BLOCKED; no real log delivery inspected |
-| Single-entry deployment | IMPLEMENTED | Shell syntax and template validation passed | BLOCKED; `apply` not executed |
+| Single-entry deployment | IMPLEMENTED | Shell syntax and template validation passed; portability fix checked locally | FAILED in the first owner-run CloudShell attempt; fixed-script AWS rerun pending |
 | Existing-data import | IMPLEMENTED | TESTED with private synthetic snapshot; repeat import/source-preservation inspected | BLOCKED; real production data not imported |
 | Rendered AWS UI and error states | Existing design retained; upload integration changed | Frontend compile/lint passed | BLOCKED pending deployed browser checks |
 
 These statuses do not upgrade the earlier local audit or owner-reported browser checks into independent cloud acceptance. Remaining limits and live acceptance steps are recorded in [the migration guide](aws-migration.md). **No complete AWS migration or production-readiness claim is made.**
+
+## First CloudShell rollout attempt and portability correction
+
+On 10 October 2026, the owner supplied output for `EXPECTED_ACCOUNT=683146427271 AWS_REGION=us-east-1 bash deploy.sh plan` and then `bash deploy.sh apply`. Read-only preflight passed, with quota `16.0`, estimated peak `10` vCPUs and two usable public subnets. The frontend production build passed. Backend compilation passed, but `npm test` reported **23 passes and 14 failures across 37 reported tests/hooks**, zero skips, in 12.05 seconds. This is a failed run, not a replacement passing result. SQLite loading failed with `ERR_DLOPEN_FAILED`: `/lib64/libm.so.6: version GLIBC_2.38 not found`, required by the downloaded `node_sqlite3.node`. Uninitialized test-server URLs and cleanup-hook errors followed the startup failures. Dependency-install advisory counts remained seven frontend and three backend; they were not force-upgraded.
+
+The script stopped at the backend test gate before its artifact/application CloudFormation creation commands. The supplied output shows no new stack creation, document migration or modification of the original application. No AWS resource inventory was independently inspected during this follow-up.
+
+Correction: added `infra/verify-native.sh`, called after backend `npm ci` by both deployment and fresh-instance bootstrap. An incompatible SQLite load triggers a scoped `npm_config_build_from_source=true npm rebuild sqlite3` on Linux with Python/make/g++ present. Rebuild failures stop immediately. The final check executes a real in-memory SQL query, creates a canvas and checks a bcrypt hash. The helper is included in the release archive. The DynamoDB runtime selection and existing visual design are unchanged.
+
+Executed local verification after this correction:
+
+- Git Bash `bash -n deploy.sh`, `bash -n infra/bootstrap.sh`, `bash -n infra/verify-native.sh`: all passed.
+- Git Bash `bash infra/verify-native.sh`: passed against actual installed Windows native modules, including the SQL query, canvas and bcrypt checks.
+- A disposable ignored shell harness with stubbed commands exercised a failed prebuilt load followed by a scoped source rebuild, a rebuild failure that stopped validation, and a final smoke-check failure that stopped validation: all three checks passed. These are control-flow checks, not evidence of a successful Linux compilation.
+- Backend `npm test`: **35/35 passed**, zero failures/skips, 12.31 seconds on Windows.
+
+The actual CloudShell source rebuild, corrected deployment, live scaling/log delivery and new website acceptance remain pending owner-run output. The 18-case emulator suite was not repeated for this installation-only correction; its earlier evidence remains historical.

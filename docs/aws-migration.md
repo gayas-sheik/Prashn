@@ -49,6 +49,7 @@ Public browser and origin connections use HTTPS. API Gateway reaches the interna
 | `infra/build_template.py` | Deterministic template generator; does not call AWS |
 | `infra/artifacts.json` | Separate private, retained release-artifact bucket |
 | `infra/bootstrap.sh` | Fresh Ubuntu instance installation, service and CloudWatch setup |
+| `infra/verify-native.sh` | Native dependency smoke checks; rebuilds an incompatible SQLite binary on Linux |
 | `backend/src/worker.ts` | Standalone SQS worker |
 | `backend/src/migrate.ts` | Read-only snapshot validation; explicit import with `--apply` |
 | `backend/src/reconcile.ts` | Read-only orphan review; explicit cleanup with `--apply` |
@@ -72,6 +73,14 @@ This exceeds the current $10 monthly alert amount if run continuously. Alerts ar
 ## Deployment procedure
 
 Run the script in **prashn-admin CloudShell or another authenticated Linux environment**, from the approved source revision. It requires AWS CLI, compatible Node/npm, Python 3, Bash, tar and curl. It does not run directly as a PowerShell script. Install Node 22 in that shell if its runtime does not satisfy the preflight check.
+
+SQLite remains a dependency for local regression tests and reading an old SQLite snapshot during migration. The cloud database is DynamoDB; the cloud server does not initialize a SQLite database. Some downloaded SQLite binaries require a newer glibc than CloudShell provides. After dependency installation, `infra/verify-native.sh` checks SQLite, rebuilds it from source on Linux if loading fails, and exercises an in-memory SQLite query, canvas and bcrypt. Any rebuild or final smoke-check failure stops deployment before provisioning. This follows the [SQLite module's source-build procedure](https://github.com/TryGhost/node-sqlite3) and requires the [node-gyp Unix toolchain](https://github.com/nodejs/node-gyp): Python, make and a C++ compiler. Fresh Ubuntu instances already install those tools and run the same native check before service setup.
+
+If the CloudShell toolchain is missing, install it in CloudShell before applying:
+
+```bash
+sudo dnf install -y gcc-c++ make python3
+```
 
 First inspect the template and run:
 
@@ -148,6 +157,7 @@ python3 infra/build_template.py
 cfn-lint infra/template.json infra/artifacts.json
 bash -n deploy.sh
 bash -n infra/bootstrap.sh
+bash -n infra/verify-native.sh
 ```
 
 See [the preparation verification report](aws-migration-test-report.md) for executed results and limits.
