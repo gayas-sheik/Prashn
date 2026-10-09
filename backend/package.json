@@ -10,13 +10,22 @@
     "dev:server": "npm run build && node dist/server.js",
     "build": "tsc",
     "start": "node dist/server.js",
-    "evaluate": "npm run build && python tests/evaluation/generate.py .test-output/evaluation/fixtures && node tests/evaluation/run.cjs"
+    "evaluate": "npm run build && python tests/evaluation/generate.py .test-output/evaluation/fixtures && node tests/evaluation/run.cjs",
+    "test:aws": "npm run build && node --test tests/aws-integration.test.cjs",
+    "worker": "node dist/worker.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.1148.0",
+    "@aws-sdk/client-s3": "^3.1148.0",
+    "@aws-sdk/client-sqs": "^3.1148.0",
+    "@aws-sdk/lib-dynamodb": "^3.1148.0",
+    "@aws-sdk/s3-presigned-post": "3.1148.0",
+    "@aws-sdk/s3-request-presigner": "3.1148.0",
+    "@napi-rs/canvas": "^0.1.80",
     "@tesseract.js-data/eng": "^1.0.0",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.6",
@@ -30,8 +39,7 @@
     "sqlite3": "^6.0.1",
     "tesseract.js": "^7.0.0",
     "uuid": "^14.0.2",
-    "zod": "^4.6.5",
-    "@napi-rs/canvas": "^0.1.80"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/bcrypt": "^6.0.0",

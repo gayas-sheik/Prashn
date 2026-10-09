@@ -73,7 +73,19 @@ export async function uploadDocuments(
     formData.append('file', f.file);
 
     try {
-      const data = await apiClient('/documents/upload', { method: 'POST', body: formData });
+      let data;
+      const health = await apiClient('/health');
+      if (health.storageMode === 's3') {
+        const mimeType = f.file.type || (/\.pdf$/i.test(f.file.name) ? 'application/pdf' : /\.png$/i.test(f.file.name) ? 'image/png' : 'image/jpeg');
+        const intent = await apiClient('/documents/upload-intent', { method: 'POST',
+          body: JSON.stringify({ fileName: f.file.name, mimeType, fileSize: f.file.size }) });
+        const directForm = new FormData();
+        for (const [key, value] of Object.entries(intent.upload.fields)) directForm.append(key, String(value));
+        directForm.append('file', f.file);
+        const uploaded = await fetch(intent.upload.url, { method: 'POST', body: directForm, credentials: 'omit' });
+        if (!uploaded.ok) throw new Error(`Document storage rejected the upload (${uploaded.status}). Please retry.`);
+        data = await apiClient(`/documents/${intent.documentId}/finalize`, { method: 'POST' });
+      } else data = await apiClient('/documents/upload', { method: 'POST', body: formData });
       onProgress?.(f.id, 100, 'Uploaded');
       newCreatedDocs.push(mapDocument(data.document));
     } catch (error) {

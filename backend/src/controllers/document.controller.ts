@@ -5,9 +5,8 @@ import { ActivityRepository } from '../repositories/activity.repository';
 import { getStorageProvider } from '../storage/storage.factory';
 import { Document } from '../types';
 import { documentProcessor as processor } from '../processing/processor';
-import fs from 'fs';
-import path from 'path';
 import { config } from '../config/env';
+import { DynamoDocumentRepository } from '../repositories/dynamodb.repositories';
 
 const docRepo = new DocumentRepository();
 const activityRepo = new ActivityRepository();
@@ -50,7 +49,7 @@ export const getDocumentMetrics = async (req: Request, res: Response) => {
     total: docs.length, queued: count(['Uploaded', 'Queued']), active: count(['Processing', 'Classifying', 'Extracting information']),
     completed: count(['Completed']), failed: count(['Failed']), totalBytes: docs.reduce((sum, doc) => sum + doc.fileSize, 0),
     concurrency: config.processingConcurrency, maxPages: config.maxPages, maxUploadBytes: 10 * 1024 * 1024,
-    storageMode: 'local', ocrEngine: 'Tesseract.js', qaMode: config.qaModel ? 'ollama' : 'extractive',
+    storageMode: config.storageMode, ocrEngine: 'Tesseract.js', qaMode: config.qaModel ? 'ollama' : 'extractive',
   } });
 };
 
@@ -76,7 +75,9 @@ export const deleteDocument = async (req: Request, res: Response) => {
     const userId = req.user!.userId;
     const id = req.params.id as string;
     
-    const doc = await docRepo.findByIdAndUserId(id, userId);
+    const doc = config.databaseMode === 'dynamodb'
+      ? await new DynamoDocumentRepository().findForDeletion(id, userId)
+      : await docRepo.findByIdAndUserId(id, userId);
     if (!doc) {
       return res.status(404).json({ error: 'Document not found' });
     }
@@ -84,13 +85,13 @@ export const deleteDocument = async (req: Request, res: Response) => {
     await processor.cancel(id);
     // Keep ownership metadata until cleanup finishes, so a failed delete can
     // be retried. Removing the metadata first would strand processed text.
-    await fs.promises.rm(path.join(config.processedDir, `${id}.txt`), { force: true });
+    await storage.deleteProcessed(id);
     await storage.deleteFile(doc.storageKey);
     await docRepo.deleteByIdAndUserId(id, userId);
     
     // Log activity
     await activityRepo.createEvent({
-      id: uuidv4(),
+      id: config.databaseMode === 'dynamodb' ? `DELETE-${id}` : uuidv4(),
       userId,
       timestamp: new Date().toISOString(),
       event: 'Document Deleted',
@@ -141,7 +142,7 @@ export const uploadSingleDocument = async (req: Request, res: Response) => {
     await persistUploadedDocument(doc);
     
     // Log activity
-    await activityRepo.createEvent({
+    if (config.databaseMode === 'local') await activityRepo.createEvent({
       id: uuidv4(),
       userId,
       timestamp: new Date().toISOString(),
@@ -199,7 +200,7 @@ export const uploadMultipleDocuments = async (req: Request, res: Response) => {
       await persistUploadedDocument(doc);
       uploadedDocs.push(doc);
       
-      await activityRepo.createEvent({
+      if (config.databaseMode === 'local') await activityRepo.createEvent({
         id: uuidv4(),
         userId,
         timestamp: new Date().toISOString(),
@@ -270,11 +271,10 @@ export const downloadDocumentFile = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Document not found' });
     }
     
-    const filePath = await storage.getFileUrl(doc.storageKey);
     res.setHeader('Content-Type', doc.mimeType);
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Cache-Control', 'private, no-store');
-    res.sendFile(path.resolve(filePath), { dotfiles: 'allow' });
+    await storage.sendFile(doc.storageKey, res);
   } catch (error) {
     console.error('Error downloading document file:', error);
     res.status(500).json({ error: 'Internal server error' });

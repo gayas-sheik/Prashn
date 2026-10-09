@@ -1,6 +1,6 @@
 # Optional AWS deployment
 
-**Status:** deployment guidance and proposed integration design, 9 October 2026. No AWS resources, adapters or deployment pipeline are supplied by this repository. This guide does not provision anything.
+**Status:** this document preserves the original hosting guidance and proposed serverless design. Since 10 October 2026, [migration preparation](aws-migration.md) supplies S3/DynamoDB/SQS adapters and deployment automation for scalable EC2 API/worker services, while retaining the local extractor and authentication. That new stack has not been deployed. The [existing EC2 installation](ec2-deployment.md) uses the original local persistence. The Cognito/Textract/Lambda design below remains a future alternative.
 
 Prashn's purpose is document processing and document-grounded question answering. AWS is an optional place to host it. The [main application guide](project-documentation.md) describes the implemented application, local setup, configuration and API.
 
@@ -97,7 +97,7 @@ For multipage PDFs, use Textract's asynchronous Start/Get operations. Persist th
 | Q&A | Load only the selected owner's document evidence; retain extractive behavior and missing-evidence refusal |
 | Operations | Implement deployment automation, least-privilege roles, alarms, backup/restore and failure recovery |
 
-Setting `STORAGE_MODE=s3` or `DATABASE_MODE=dynamodb` does not implement these changes. Storage boundaries are a starting point, but the processor also writes extracted text directly to disk, and multiple repositories use SQLite. Migration must cover all those paths.
+The implemented EC2-worker migration now selects S3/DynamoDB/SQS adapters through the complete mode tuple and required resource configuration; it replaces authoritative local storage/queue dependencies. See [the current migration guide](aws-migration.md). Merely setting a flag does not provision resources or implement the Cognito, Textract, direct Lambda or identity changes proposed in this section.
 
 ### Upload and data design
 

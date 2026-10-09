@@ -11,6 +11,7 @@ import {
 } from '../controllers/document.controller';
 import { requireAuth } from '../middleware/auth.middleware';
 import { upload } from '../middleware/upload.middleware';
+import { createUploadIntent, finalizeUpload } from '../controllers/cloud-upload.controller';
 
 const router = Router();
 
@@ -18,6 +19,8 @@ router.use(requireAuth);
 
 router.get('/', getDocuments);
 router.get('/metrics', getDocumentMetrics);
+router.post('/upload-intent', createUploadIntent);
+router.post('/:id/finalize', finalizeUpload);
 router.get('/:id', getDocumentById);
 router.get('/:id/file', downloadDocumentFile);
 router.delete('/:id', deleteDocument);

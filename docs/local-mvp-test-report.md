@@ -114,3 +114,17 @@ The new guard correctly refuses a missing signing secret in both development and
 ### Authorized Brave follow-up - 9 October 2026
 
 After authorization to proceed with Brave, browser discovery still returned no apps or browsers. Explicitly opening the local application with browser ID `brave` returned `Browser is not available: brave`. No additional UI test ran. Browser acceptance remains BLOCKED pending browser access; this result does not demonstrate an application compatibility failure.
+
+## EC2 deployment follow-up - 10 October 2026
+
+The unchanged application source at `1b4217e` was deployed on Ubuntu 24.04 EC2 with Node 22.23.3, Nginx and HTTPS. Owner-supplied terminal output showed a fresh backend `npm test` run with **35/35 passing**, zero failures/skips, and a successful frontend production build. Backend production-only dependency audit reported zero known advisories; full installation still reported development/build dependency advisories, which were not repaired in this pass.
+
+Inspected command results confirmed HTTP 200 health directly and through Nginx, HTTP 200 frontend HTML through Nginx, HTTPS health with normal certificate validation, HTTP-to-HTTPS 301 redirection, an enabled certificate-renewal timer and a successful Certbot renewal dry run. The owner reported successful browser use and retained document/field/question-history data after a backend restart; a subsequent health response was supplied. Temporary CloudShell SSH access was revoked and the remaining SSH rule was inspected.
+
+See [the deployment record](ec2-deployment.md) for commands, configuration and evidence boundaries. Owner-reported browser checks do not replace the blocked independent rendered UI review in the local audit. The original local audit verdict is unchanged. This is EC2 hosting with local storage/processing, not verification of S3, DynamoDB, SQS, Textract, Cognito, scaling or CloudWatch application-log integration. No application code or visual design changed during this deployment pass.
+
+## AWS adapter preparation regression - 10 October 2026
+
+After adding optional S3/DynamoDB/SQS mode, the shared extraction pipeline and local storage/repository alternatives were rerun through `npm test`: **35/35 passed**, zero failures/skips, in the final captured 12.83-second run. Frontend production build and lint passed; lint retains the 11 existing React advisory warnings. CSS output is unchanged. Backend production-only dependency audit reported zero known advisories after SDK installation; development/build advisories remain unresolved.
+
+The separate `npm run test:aws` suite passed **18/18** against local Moto services, including two-worker processing, user isolation, durable outbox/retries, a timed heartbeat, large output and size-boundary handling, deletion races and snapshot import. See [the preparation report](aws-migration-test-report.md) for precise scope and the [rollout guide](aws-migration.md). These are emulator results, not live AWS provisioning, scaling, logging or browser acceptance. The deployed original EC2 application and actual production data were not modified by preparation. The earlier independent local audit verdict is unchanged.

@@ -8,16 +8,26 @@ import activityRoutes from './routes/activity.routes';
 import questionRoutes from './routes/question.routes';
 import multer from 'multer';
 import path from 'path';
+import { log } from './observability/log';
+import { isConditional } from './repositories/dynamodb.repositories';
 
 const app = express();
+app.use((req, res, next) => {
+  const started = Date.now();
+  res.on('finish', () => {
+    if (config.processingMode === 'sqs') log('http_request', { method: req.method,
+      route: req.route?.path || 'api', status: res.statusCode, durationMs: Date.now() - started });
+  });
+  next();
+});
 
-app.use(cors({ origin: config.corsOrigin, credentials: true }));
+if (config.corsOrigin !== 'same-origin') app.use(cors({ origin: config.corsOrigin, credentials: true }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Health check
 app.get('/api/health', (req, res) => {
-  res.status(200).json({ status: 'ok', environment: config.nodeEnv, processingMode: 'local', qaMode: config.qaModel ? 'ollama' : 'extractive', workspace: path.basename(path.resolve(__dirname, '../..')), extractionVersion: 'layout-fields-v2' });
+  res.status(200).json({ status: 'ok', environment: config.nodeEnv, processingMode: config.processingMode, storageMode: config.storageMode, databaseMode: config.databaseMode, release: config.release, qaMode: config.qaModel ? 'ollama' : 'extractive', workspace: path.basename(path.resolve(__dirname, '../..')), extractionVersion: 'layout-fields-v2' });
 });
 
 // Routes
@@ -30,6 +40,7 @@ app.use('/api/activity', activityRoutes);
 app.use((err: any, req: express.Request, res: express.Response, _next: express.NextFunction) => {
   if (!err.status || err.status >= 500) console.error('Unhandled error:', err);
   if (res.headersSent) return _next(err);
+  if (isConditional(err)) return res.status(409).json({ error:'Document state changed. Refresh and try again.' });
   res.removeHeader('Content-Type');
   if (err instanceof multer.MulterError) return res.status(err.code === 'LIMIT_FILE_SIZE' ? 413 : 400).json({ error: err.code === 'LIMIT_FILE_SIZE' ? 'File exceeds the 10 MB upload limit' : err.message });
   const status = Number(err.status) || 500;

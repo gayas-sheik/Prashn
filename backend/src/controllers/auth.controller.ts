@@ -13,7 +13,7 @@ export const register = async (req: Request, res: Response) => {
     const { password, fullName } = req.body || {};
     const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
     
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || typeof password !== 'string' || password.length < 8 || Buffer.byteLength(password) > 72 || typeof fullName !== 'string' || !fullName.trim() || fullName.length > 100) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || Buffer.byteLength(email)>254 || typeof password !== 'string' || password.length < 8 || Buffer.byteLength(password) > 72 || typeof fullName !== 'string' || !fullName.trim() || fullName.length > 100) {
       return res.status(400).json({ error: 'Enter a valid email, full name, and password (8 to 72 bytes)' });
     }
 
@@ -40,7 +40,7 @@ export const register = async (req: Request, res: Response) => {
     res.status(201).json({ message: 'User created successfully' });
   } catch (error: any) {
     // The UNIQUE constraint is authoritative when registrations race.
-    if (error?.code === 'SQLITE_CONSTRAINT' && /users\.email/.test(error.message || '')) {
+    if (error?.code === 'EMAIL_EXISTS' || (error?.code === 'SQLITE_CONSTRAINT' && /users\.email/.test(error.message || ''))) {
       return res.status(409).json({ error: 'Email already registered' });
     }
     console.error('Registration error:', error);
@@ -53,7 +53,7 @@ export const login = async (req: Request, res: Response) => {
     const { password } = req.body || {};
     const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
 
-    if (!email || typeof password !== 'string' || !password || Buffer.byteLength(password) > 72) {
+    if (!email || Buffer.byteLength(email)>254 || typeof password !== 'string' || !password || Buffer.byteLength(password) > 72) {
       return res.status(400).json({ error: 'Missing credentials' });
     }
 

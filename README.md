@@ -34,6 +34,8 @@ An ID image or PDF can undergo the same text extraction and supported field matc
 
 - [Application guide](docs/project-documentation.md): features, architecture, setup, user workflows, processing, Q&A, data handling, configuration, API reference, testing, troubleshooting and limitations.
 - [Optional AWS deployment](docs/aws-architecture.md): hosting choices and a proposed managed-service migration, with prerequisites and implementation gaps clearly identified.
+- [EC2 deployment record](docs/ec2-deployment.md): current HTTPS hosting, inspected command results, owner-reported browser checks, operations and remaining migration work.
+- [AWS migration and automation](docs/aws-migration.md): implemented cloud adapters, durable workers, deployment script, cost review and live rollout checklist.
 - [Evaluation and browser verification](docs/synthetic-evaluation-report.md): before/after measurements, tested browser flows and verification limits.
 - [Earlier validation history](docs/local-mvp-test-report.md): repair history and regression coverage.
 - [Final local MVP audit](docs/local-mvp-final-audit.md): independent acceptance evidence, repairs, remaining limitations and migration readiness.
@@ -117,10 +119,12 @@ These are results for the tested fixtures and flows, not an estimate of accuracy
 
 ## Current boundaries
 
-The processing queue operates within one backend process. Only theme selection has implemented persistent settings behavior; account management, notification integrations and other displayed planned settings are unfinished. Password recovery, token revocation, rate limiting and a complete production security review are not implemented.
+The default local processing queue operates within one backend process. Optional AWS mode uses SQS workers and shared S3/DynamoDB persistence; its new infrastructure has not been deployed. Only theme selection has implemented persistent settings behavior; account management, notification integrations and other displayed planned settings are unfinished. Password recovery, token revocation, application-level rate limiting and a complete production security review are not implemented. The deployment templates configure gateway throttling separately.
 
 After updating a compiled backend, rebuild and restart it. Existing documents need **Reprocess** to use newer extraction logic. Back up the database and stored files together before changing storage paths or migrating data.
 
 ## Optional AWS deployment
 
-AWS is an optional hosting and integration path. This repository does not currently provision AWS resources or implement S3, DynamoDB, Cognito, SQS or Textract adapters. The [optional deployment guide](docs/aws-architecture.md) separates hosting the existing application on EC2 from a larger managed-service migration. Neither is a requirement for the current application's purpose or local setup.
+AWS is an optional hosting and integration path. S3 storage, DynamoDB repositories, SQS workers and CloudFormation deployment automation are implemented in the [migration preparation](docs/aws-migration.md), with [18 passing local emulator cases](docs/aws-migration-test-report.md). New AWS resource creation, live scaling/log delivery and cloud browser acceptance remain unverified. Cognito and Textract adapters are not implemented; the prepared deployment retains existing authentication and PDF/OCR extraction. The [architecture guide](docs/aws-architecture.md) also preserves the larger proposed serverless design.
+
+The existing application was manually deployed to EC2 on 10 October 2026 at [the Prashn HTTPS website](https://prashn.98-81-180-63.sslip.io/), retaining SQLite, filesystem storage and local PDF/OCR processing. See the [deployment record](docs/ec2-deployment.md) for evidence, maintenance and limitations. This hosting deployment does not implement the proposed managed-service migration; its address depends on the current instance public IP.

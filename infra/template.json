@@ -1,0 +1,1531 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Prashn S3, DynamoDB, SQS workers, scalable API, private routing and HTTPS frontend",
+  "Parameters": {
+    "VpcId": {
+      "Type": "AWS::EC2::VPC::Id"
+    },
+    "SubnetIds": {
+      "Type": "List<AWS::EC2::Subnet::Id>"
+    },
+    "InstanceType": {
+      "Type": "String",
+      "Default": "t3.small",
+      "AllowedValues": [
+        "t3.small",
+        "t3.medium"
+      ]
+    },
+    "MaxInstances": {
+      "Type": "Number",
+      "Default": 2,
+      "MinValue": 2,
+      "MaxValue": 4
+    },
+    "UbuntuImage": {
+      "Type": "AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>",
+      "Default": "/aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id"
+    },
+    "ArtifactBucket": {
+      "Type": "String",
+      "AllowedPattern": "[a-z0-9.-]+"
+    },
+    "ArtifactKey": {
+      "Type": "String",
+      "AllowedPattern": "[a-f0-9]{64}\\.tar\\.gz"
+    },
+    "ArtifactDigest": {
+      "Type": "String",
+      "AllowedPattern": "[a-f0-9]{64}"
+    },
+    "JwtParameter": {
+      "Type": "String",
+      "AllowedPattern": "/prashn/[a-z0-9-]+/jwt"
+    }
+  },
+  "Resources": {
+    "Documents": {
+      "Type": "AWS::S3::Bucket",
+      "Properties": {
+        "PublicAccessBlockConfiguration": {
+          "BlockPublicAcls": true,
+          "BlockPublicPolicy": true,
+          "IgnorePublicAcls": true,
+          "RestrictPublicBuckets": true
+        },
+        "OwnershipControls": {
+          "Rules": [
+            {
+              "ObjectOwnership": "BucketOwnerEnforced"
+            }
+          ]
+        },
+        "BucketEncryption": {
+          "ServerSideEncryptionConfiguration": [
+            {
+              "ServerSideEncryptionByDefault": {
+                "SSEAlgorithm": "AES256"
+              }
+            }
+          ]
+        },
+        "CorsConfiguration": {
+          "CorsRules": [
+            {
+              "AllowedOrigins": [
+                "*"
+              ],
+              "AllowedMethods": [
+                "POST",
+                "GET",
+                "HEAD"
+              ],
+              "AllowedHeaders": [
+                "*"
+              ],
+              "MaxAge": 300
+            }
+          ]
+        },
+        "LifecycleConfiguration": {
+          "Rules": [
+            {
+              "Id": "ExpireStaging",
+              "Status": "Enabled",
+              "Prefix": "staging/",
+              "ExpirationInDays": 1
+            },
+            {
+              "Id": "AbortMultipart",
+              "Status": "Enabled",
+              "AbortIncompleteMultipartUpload": {
+                "DaysAfterInitiation": 1
+              }
+            }
+          ]
+        }
+      },
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain"
+    },
+    "Frontend": {
+      "Type": "AWS::S3::Bucket",
+      "Properties": {
+        "PublicAccessBlockConfiguration": {
+          "BlockPublicAcls": true,
+          "BlockPublicPolicy": true,
+          "IgnorePublicAcls": true,
+          "RestrictPublicBuckets": true
+        },
+        "OwnershipControls": {
+          "Rules": [
+            {
+              "ObjectOwnership": "BucketOwnerEnforced"
+            }
+          ]
+        },
+        "BucketEncryption": {
+          "ServerSideEncryptionConfiguration": [
+            {
+              "ServerSideEncryptionByDefault": {
+                "SSEAlgorithm": "AES256"
+              }
+            }
+          ]
+        }
+      },
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain"
+    },
+    "DocumentsTlsPolicy": {
+      "Type": "AWS::S3::BucketPolicy",
+      "Properties": {
+        "Bucket": {
+          "Ref": "Documents"
+        },
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Deny",
+              "Principal": "*",
+              "Action": "s3:*",
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "Documents",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::Sub": "${Documents.Arn}/*"
+                }
+              ],
+              "Condition": {
+                "Bool": {
+                  "aws:SecureTransport": "false"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "FrontendTlsPolicy": {
+      "Type": "AWS::S3::BucketPolicy",
+      "Properties": {
+        "Bucket": {
+          "Ref": "Frontend"
+        },
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Deny",
+              "Principal": "*",
+              "Action": "s3:*",
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "Frontend",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::Sub": "${Frontend.Arn}/*"
+                }
+              ],
+              "Condition": {
+                "Bool": {
+                  "aws:SecureTransport": "false"
+                }
+              }
+            },
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "cloudfront.amazonaws.com"
+              },
+              "Action": "s3:GetObject",
+              "Resource": {
+                "Fn::Sub": "${Frontend.Arn}/*"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "AWS:SourceArn": {
+                    "Fn::Sub": "arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${Distribution}"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "Data": {
+      "Type": "AWS::DynamoDB::Table",
+      "Properties": {
+        "BillingMode": "PAY_PER_REQUEST",
+        "SSESpecification": {
+          "SSEEnabled": true
+        },
+        "PointInTimeRecoverySpecification": {
+          "PointInTimeRecoveryEnabled": true
+        },
+        "AttributeDefinitions": [
+          {
+            "AttributeName": "PK",
+            "AttributeType": "S"
+          },
+          {
+            "AttributeName": "SK",
+            "AttributeType": "S"
+          },
+          {
+            "AttributeName": "GSI1PK",
+            "AttributeType": "S"
+          },
+          {
+            "AttributeName": "GSI1SK",
+            "AttributeType": "S"
+          },
+          {
+            "AttributeName": "dispatchPK",
+            "AttributeType": "S"
+          },
+          {
+            "AttributeName": "dispatchSK",
+            "AttributeType": "S"
+          }
+        ],
+        "KeySchema": [
+          {
+            "AttributeName": "PK",
+            "KeyType": "HASH"
+          },
+          {
+            "AttributeName": "SK",
+            "KeyType": "RANGE"
+          }
+        ],
+        "GlobalSecondaryIndexes": [
+          {
+            "IndexName": "OwnerIndex",
+            "KeySchema": [
+              {
+                "AttributeName": "GSI1PK",
+                "KeyType": "HASH"
+              },
+              {
+                "AttributeName": "GSI1SK",
+                "KeyType": "RANGE"
+              }
+            ],
+            "Projection": {
+              "ProjectionType": "ALL"
+            }
+          },
+          {
+            "IndexName": "DispatchIndex",
+            "KeySchema": [
+              {
+                "AttributeName": "dispatchPK",
+                "KeyType": "HASH"
+              },
+              {
+                "AttributeName": "dispatchSK",
+                "KeyType": "RANGE"
+              }
+            ],
+            "Projection": {
+              "ProjectionType": "ALL"
+            }
+          }
+        ]
+      },
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain"
+    },
+    "DeadLetters": {
+      "Type": "AWS::SQS::Queue",
+      "Properties": {
+        "MessageRetentionPeriod": 1209600,
+        "SqsManagedSseEnabled": true
+      }
+    },
+    "Jobs": {
+      "Type": "AWS::SQS::Queue",
+      "Properties": {
+        "VisibilityTimeout": 120,
+        "ReceiveMessageWaitTimeSeconds": 20,
+        "MessageRetentionPeriod": 345600,
+        "SqsManagedSseEnabled": true,
+        "RedrivePolicy": {
+          "deadLetterTargetArn": {
+            "Fn::GetAtt": [
+              "DeadLetters",
+              "Arn"
+            ]
+          },
+          "maxReceiveCount": 10
+        }
+      }
+    },
+    "ApplicationLogs": {
+      "Type": "AWS::Logs::LogGroup",
+      "Properties": {
+        "LogGroupName": {
+          "Fn::Sub": "/prashn/${AWS::StackName}/application"
+        },
+        "RetentionInDays": 14
+      },
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain"
+    },
+    "AccessLogs": {
+      "Type": "AWS::Logs::LogGroup",
+      "Properties": {
+        "LogGroupName": {
+          "Fn::Sub": "/prashn/${AWS::StackName}/access"
+        },
+        "RetentionInDays": 14
+      },
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain"
+    },
+    "VpcLinkSecurity": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "API Gateway VPC link",
+        "VpcId": {
+          "Ref": "VpcId"
+        }
+      }
+    },
+    "BalancerSecurity": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Private API ingress from VPC link only",
+        "VpcId": {
+          "Ref": "VpcId"
+        },
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 80,
+            "ToPort": 80,
+            "SourceSecurityGroupId": {
+              "Ref": "VpcLinkSecurity"
+            }
+          }
+        ]
+      }
+    },
+    "ApiSecurity": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "API instances; no public inbound access",
+        "VpcId": {
+          "Ref": "VpcId"
+        },
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 5000,
+            "ToPort": 5000,
+            "SourceSecurityGroupId": {
+              "Ref": "BalancerSecurity"
+            }
+          }
+        ]
+      }
+    },
+    "WorkerSecurity": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Workers; no inbound access",
+        "VpcId": {
+          "Ref": "VpcId"
+        }
+      }
+    },
+    "Balancer": {
+      "Type": "AWS::ElasticLoadBalancingV2::LoadBalancer",
+      "Properties": {
+        "Scheme": "internal",
+        "Type": "application",
+        "Subnets": {
+          "Ref": "SubnetIds"
+        },
+        "SecurityGroups": [
+          {
+            "Ref": "BalancerSecurity"
+          }
+        ]
+      }
+    },
+    "ApiTargets": {
+      "Type": "AWS::ElasticLoadBalancingV2::TargetGroup",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VpcId"
+        },
+        "Protocol": "HTTP",
+        "Port": 5000,
+        "TargetType": "instance",
+        "HealthCheckPath": "/api/health",
+        "HealthCheckIntervalSeconds": 30,
+        "HealthyThresholdCount": 2,
+        "TargetGroupAttributes": [
+          {
+            "Key": "deregistration_delay.timeout_seconds",
+            "Value": "30"
+          }
+        ]
+      }
+    },
+    "Listener": {
+      "Type": "AWS::ElasticLoadBalancingV2::Listener",
+      "Properties": {
+        "LoadBalancerArn": {
+          "Ref": "Balancer"
+        },
+        "Protocol": "HTTP",
+        "Port": 80,
+        "DefaultActions": [
+          {
+            "Type": "forward",
+            "TargetGroupArn": {
+              "Ref": "ApiTargets"
+            }
+          }
+        ]
+      }
+    },
+    "HttpApi": {
+      "Type": "AWS::ApiGatewayV2::Api",
+      "Properties": {
+        "ProtocolType": "HTTP",
+        "Name": {
+          "Fn::Sub": "${AWS::StackName}-api"
+        }
+      }
+    },
+    "VpcLink": {
+      "Type": "AWS::ApiGatewayV2::VpcLink",
+      "Properties": {
+        "Name": {
+          "Fn::Sub": "${AWS::StackName}-link"
+        },
+        "SubnetIds": {
+          "Ref": "SubnetIds"
+        },
+        "SecurityGroupIds": [
+          {
+            "Ref": "VpcLinkSecurity"
+          }
+        ]
+      }
+    },
+    "ApiIntegration": {
+      "Type": "AWS::ApiGatewayV2::Integration",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "IntegrationType": "HTTP_PROXY",
+        "IntegrationMethod": "ANY",
+        "IntegrationUri": {
+          "Ref": "Listener"
+        },
+        "ConnectionType": "VPC_LINK",
+        "ConnectionId": {
+          "Ref": "VpcLink"
+        },
+        "PayloadFormatVersion": "1.0",
+        "RequestParameters": {
+          "overwrite:path": "$request.path"
+        },
+        "TimeoutInMillis": 30000
+      }
+    },
+    "DefaultRoute": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "RouteKey": "$default",
+        "Target": {
+          "Fn::Sub": "integrations/${ApiIntegration}"
+        }
+      }
+    },
+    "LoginRoute": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "RouteKey": "POST /api/auth/login",
+        "Target": {
+          "Fn::Sub": "integrations/${ApiIntegration}"
+        }
+      }
+    },
+    "RegisterRoute": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "RouteKey": "POST /api/auth/register",
+        "Target": {
+          "Fn::Sub": "integrations/${ApiIntegration}"
+        }
+      }
+    },
+    "Stage": {
+      "Type": "AWS::ApiGatewayV2::Stage",
+      "Properties": {
+        "ApiId": {
+          "Ref": "HttpApi"
+        },
+        "StageName": "$default",
+        "AutoDeploy": true,
+        "DefaultRouteSettings": {
+          "ThrottlingBurstLimit": 40,
+          "ThrottlingRateLimit": 20
+        },
+        "RouteSettings": {
+          "POST /api/auth/login": {
+            "ThrottlingBurstLimit": 10,
+            "ThrottlingRateLimit": 1
+          },
+          "POST /api/auth/register": {
+            "ThrottlingBurstLimit": 10,
+            "ThrottlingRateLimit": 1
+          }
+        },
+        "AccessLogSettings": {
+          "DestinationArn": {
+            "Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:${AccessLogs}"
+          },
+          "Format": "{\"requestId\":\"$context.requestId\",\"route\":\"$context.routeKey\",\"status\":\"$context.status\",\"latency\":\"$context.responseLatency\"}"
+        }
+      },
+      "DependsOn": [
+        "DefaultRoute",
+        "LoginRoute",
+        "RegisterRoute"
+      ]
+    },
+    "OriginAccess": {
+      "Type": "AWS::CloudFront::OriginAccessControl",
+      "Properties": {
+        "OriginAccessControlConfig": {
+          "Name": {
+            "Fn::Sub": "${AWS::StackName}-frontend"
+          },
+          "OriginAccessControlOriginType": "s3",
+          "SigningBehavior": "always",
+          "SigningProtocol": "sigv4"
+        }
+      }
+    },
+    "ApiOriginPolicy": {
+      "Type": "AWS::CloudFront::OriginRequestPolicy",
+      "Properties": {
+        "OriginRequestPolicyConfig": {
+          "Name": {
+            "Fn::Sub": "${AWS::StackName}-api-origin"
+          },
+          "CookiesConfig": {
+            "CookieBehavior": "all"
+          },
+          "QueryStringsConfig": {
+            "QueryStringBehavior": "all"
+          },
+          "HeadersConfig": {
+            "HeaderBehavior": "allExcept",
+            "Headers": [
+              "Host"
+            ]
+          }
+        }
+      }
+    },
+    "SpaRoutes": {
+      "Type": "AWS::CloudFront::Function",
+      "Properties": {
+        "Name": {
+          "Fn::Sub": "${AWS::StackName}-spa"
+        },
+        "AutoPublish": true,
+        "FunctionConfig": {
+          "Comment": "Rewrite frontend routes without changing API error responses",
+          "Runtime": "cloudfront-js-2.0"
+        },
+        "FunctionCode": "function handler(event) { var r = event.request; if (r.uri.indexOf('.') < 0 || r.uri.endsWith('/')) r.uri = '/index.html'; return r; }"
+      }
+    },
+    "Distribution": {
+      "Type": "AWS::CloudFront::Distribution",
+      "Properties": {
+        "DistributionConfig": {
+          "Enabled": true,
+          "HttpVersion": "http2and3",
+          "PriceClass": "PriceClass_100",
+          "ViewerCertificate": {
+            "CloudFrontDefaultCertificate": true
+          },
+          "Origins": [
+            {
+              "Id": "frontend",
+              "DomainName": {
+                "Fn::GetAtt": [
+                  "Frontend",
+                  "RegionalDomainName"
+                ]
+              },
+              "S3OriginConfig": {
+                "OriginAccessIdentity": ""
+              },
+              "OriginAccessControlId": {
+                "Ref": "OriginAccess"
+              }
+            },
+            {
+              "Id": "api",
+              "DomainName": {
+                "Fn::Sub": "${HttpApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}"
+              },
+              "CustomOriginConfig": {
+                "OriginProtocolPolicy": "https-only",
+                "OriginSSLProtocols": [
+                  "TLSv1.2"
+                ]
+              }
+            }
+          ],
+          "DefaultCacheBehavior": {
+            "TargetOriginId": "frontend",
+            "ViewerProtocolPolicy": "redirect-to-https",
+            "Compress": true,
+            "CachePolicyId": "658327ea-f89d-4fab-a63d-7e88639e58f6",
+            "FunctionAssociations": [
+              {
+                "EventType": "viewer-request",
+                "FunctionARN": {
+                  "Fn::GetAtt": [
+                    "SpaRoutes",
+                    "FunctionARN"
+                  ]
+                }
+              }
+            ]
+          },
+          "CacheBehaviors": [
+            {
+              "PathPattern": "/api/*",
+              "TargetOriginId": "api",
+              "ViewerProtocolPolicy": "https-only",
+              "AllowedMethods": [
+                "GET",
+                "HEAD",
+                "OPTIONS",
+                "PUT",
+                "PATCH",
+                "POST",
+                "DELETE"
+              ],
+              "CachedMethods": [
+                "GET",
+                "HEAD"
+              ],
+              "CachePolicyId": "4135ea2d-6df8-44a3-9df3-4b5a84be39ad",
+              "OriginRequestPolicyId": {
+                "Ref": "ApiOriginPolicy"
+              },
+              "Compress": true
+            }
+          ]
+        }
+      },
+      "DependsOn": "Stage"
+    },
+    "ApiRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "ec2.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "ManagedPolicyArns": [
+          {
+            "Fn::Sub": "arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore"
+          }
+        ],
+        "Policies": [
+          {
+            "PolicyName": "workload",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:GetObject"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::${ArtifactBucket}/${ArtifactKey}"
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:GetObject",
+                    "s3:PutObject",
+                    "s3:DeleteObject"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "${Documents.Arn}/*"
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:ListBucket"
+                  ],
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "Documents",
+                      "Arn"
+                    ]
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "dynamodb:GetItem",
+                    "dynamodb:PutItem",
+                    "dynamodb:UpdateItem",
+                    "dynamodb:DeleteItem",
+                    "dynamodb:Query",
+                    "dynamodb:ConditionCheckItem"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::GetAtt": [
+                        "Data",
+                        "Arn"
+                      ]
+                    },
+                    {
+                      "Fn::Sub": "${Data.Arn}/index/*"
+                    }
+                  ]
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "sqs:SendMessage"
+                  ],
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "Jobs",
+                      "Arn"
+                    ]
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "ssm:GetParameter"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${JwtParameter}"
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "logs:CreateLogGroup",
+                    "logs:CreateLogStream",
+                    "logs:PutLogEvents",
+                    "logs:DescribeLogStreams"
+                  ],
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "ApplicationLogs",
+                      "Arn"
+                    ]
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "cloudwatch:PutMetricData"
+                  ],
+                  "Resource": "*",
+                  "Condition": {
+                    "StringEquals": {
+                      "cloudwatch:namespace": "Prashn"
+                    }
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "cloudformation:SignalResource",
+                    "cloudformation:DescribeStacks"
+                  ],
+                  "Resource": {
+                    "Ref": "AWS::StackId"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "ApiProfile": {
+      "Type": "AWS::IAM::InstanceProfile",
+      "Properties": {
+        "Roles": [
+          {
+            "Ref": "ApiRole"
+          }
+        ]
+      }
+    },
+    "ApiLaunch": {
+      "Type": "AWS::EC2::LaunchTemplate",
+      "Properties": {
+        "LaunchTemplateData": {
+          "ImageId": {
+            "Ref": "UbuntuImage"
+          },
+          "InstanceType": {
+            "Ref": "InstanceType"
+          },
+          "IamInstanceProfile": {
+            "Arn": {
+              "Fn::GetAtt": [
+                "ApiProfile",
+                "Arn"
+              ]
+            }
+          },
+          "MetadataOptions": {
+            "HttpTokens": "required",
+            "HttpPutResponseHopLimit": 1
+          },
+          "CreditSpecification": {
+            "CpuCredits": "standard"
+          },
+          "BlockDeviceMappings": [
+            {
+              "DeviceName": "/dev/sda1",
+              "Ebs": {
+                "VolumeSize": 20,
+                "VolumeType": "gp3",
+                "Encrypted": true,
+                "DeleteOnTermination": true
+              }
+            }
+          ],
+          "NetworkInterfaces": [
+            {
+              "DeviceIndex": 0,
+              "AssociatePublicIpAddress": true,
+              "Groups": [
+                {
+                  "Ref": "ApiSecurity"
+                }
+              ]
+            }
+          ],
+          "UserData": {
+            "Fn::Base64": {
+              "Fn::Sub": "#!/bin/bash\nset -euo pipefail\nexport DEBIAN_FRONTEND=noninteractive\napt-get update -qq\napt-get install -y -qq curl unzip ca-certificates\ncurl -fsS https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip -o /tmp/aws.zip\nunzip -q /tmp/aws.zip -d /tmp\n/tmp/aws/install\nmkdir -p /opt/prashn\naws s3 cp 's3://${ArtifactBucket}/${ArtifactKey}' /tmp/prashn.tar.gz --region '${AWS::Region}' --only-show-errors\necho '${ArtifactDigest}  /tmp/prashn.tar.gz' | sha256sum -c -\ntar -xzf /tmp/prashn.tar.gz -C /opt/prashn\nexport AWS_REGION='${AWS::Region}' DOCUMENT_BUCKET='${Documents}' DYNAMODB_TABLE='${Data}' PROCESSING_QUEUE_URL='${Jobs}'\nexport JWT_PARAMETER='${JwtParameter}' LOG_GROUP='${ApplicationLogs}' ENTRY='server.js' STACK_NAME='${AWS::StackName}' LOGICAL_RESOURCE='ApiGroup'\nbash /opt/prashn/infra/bootstrap.sh\nstate=$(aws cloudformation describe-stacks --stack-name \"$STACK_NAME\" --query 'Stacks[0].StackStatus' --output text --region \"$AWS_REGION\")\nif [[ \"$state\" == CREATE_IN_PROGRESS || \"$state\" == UPDATE_IN_PROGRESS ]]; then\n  aws cloudformation signal-resource --stack-name \"$STACK_NAME\" --logical-resource-id \"$LOGICAL_RESOURCE\" --unique-id \"$(hostname)\" --status SUCCESS --region \"$AWS_REGION\"\nfi\n"
+            }
+          }
+        }
+      }
+    },
+    "ApiGroup": {
+      "Type": "AWS::AutoScaling::AutoScalingGroup",
+      "Properties": {
+        "MinSize": "1",
+        "MaxSize": {
+          "Ref": "MaxInstances"
+        },
+        "DesiredCapacity": "1",
+        "VPCZoneIdentifier": {
+          "Ref": "SubnetIds"
+        },
+        "DefaultInstanceWarmup": 300,
+        "LaunchTemplate": {
+          "LaunchTemplateId": {
+            "Ref": "ApiLaunch"
+          },
+          "Version": {
+            "Fn::GetAtt": [
+              "ApiLaunch",
+              "LatestVersionNumber"
+            ]
+          }
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Sub": "${AWS::StackName}-api"
+            },
+            "PropagateAtLaunch": true
+          }
+        ],
+        "TargetGroupARNs": [
+          {
+            "Ref": "ApiTargets"
+          }
+        ],
+        "HealthCheckType": "ELB",
+        "HealthCheckGracePeriod": 600
+      },
+      "CreationPolicy": {
+        "ResourceSignal": {
+          "Count": 1,
+          "Timeout": "PT20M"
+        }
+      },
+      "UpdatePolicy": {
+        "AutoScalingRollingUpdate": {
+          "MinInstancesInService": 1,
+          "MaxBatchSize": 1,
+          "PauseTime": "PT20M",
+          "WaitOnResourceSignals": true
+        }
+      }
+    },
+    "ApiRequestScaling": {
+      "Type": "AWS::AutoScaling::ScalingPolicy",
+      "Properties": {
+        "AutoScalingGroupName": {
+          "Ref": "ApiGroup"
+        },
+        "PolicyType": "TargetTrackingScaling",
+        "TargetTrackingConfiguration": {
+          "TargetValue": 100,
+          "PredefinedMetricSpecification": {
+            "PredefinedMetricType": "ALBRequestCountPerTarget",
+            "ResourceLabel": {
+              "Fn::Join": [
+                "/",
+                [
+                  {
+                    "Fn::GetAtt": [
+                      "Balancer",
+                      "LoadBalancerFullName"
+                    ]
+                  },
+                  {
+                    "Fn::GetAtt": [
+                      "ApiTargets",
+                      "TargetGroupFullName"
+                    ]
+                  }
+                ]
+              ]
+            }
+          }
+        }
+      }
+    },
+    "WorkerRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "ec2.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "ManagedPolicyArns": [
+          {
+            "Fn::Sub": "arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore"
+          }
+        ],
+        "Policies": [
+          {
+            "PolicyName": "workload",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:GetObject"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::${ArtifactBucket}/${ArtifactKey}"
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:GetObject",
+                    "s3:PutObject",
+                    "s3:DeleteObject"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "${Documents.Arn}/results/*"
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:ListBucket"
+                  ],
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "Documents",
+                      "Arn"
+                    ]
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "dynamodb:GetItem",
+                    "dynamodb:PutItem",
+                    "dynamodb:UpdateItem",
+                    "dynamodb:DeleteItem",
+                    "dynamodb:Query",
+                    "dynamodb:ConditionCheckItem"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::GetAtt": [
+                        "Data",
+                        "Arn"
+                      ]
+                    },
+                    {
+                      "Fn::Sub": "${Data.Arn}/index/*"
+                    }
+                  ]
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "sqs:SendMessage",
+                    "sqs:ReceiveMessage",
+                    "sqs:DeleteMessage",
+                    "sqs:ChangeMessageVisibility"
+                  ],
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "Jobs",
+                      "Arn"
+                    ]
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "ssm:GetParameter"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${JwtParameter}"
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "logs:CreateLogGroup",
+                    "logs:CreateLogStream",
+                    "logs:PutLogEvents",
+                    "logs:DescribeLogStreams"
+                  ],
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "ApplicationLogs",
+                      "Arn"
+                    ]
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "cloudwatch:PutMetricData"
+                  ],
+                  "Resource": "*",
+                  "Condition": {
+                    "StringEquals": {
+                      "cloudwatch:namespace": "Prashn"
+                    }
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "cloudformation:SignalResource",
+                    "cloudformation:DescribeStacks"
+                  ],
+                  "Resource": {
+                    "Ref": "AWS::StackId"
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:GetObject",
+                    "s3:DeleteObject"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "${Documents.Arn}/originals/*"
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:DeleteObject"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "${Documents.Arn}/staging/*"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "WorkerProfile": {
+      "Type": "AWS::IAM::InstanceProfile",
+      "Properties": {
+        "Roles": [
+          {
+            "Ref": "WorkerRole"
+          }
+        ]
+      }
+    },
+    "WorkerLaunch": {
+      "Type": "AWS::EC2::LaunchTemplate",
+      "Properties": {
+        "LaunchTemplateData": {
+          "ImageId": {
+            "Ref": "UbuntuImage"
+          },
+          "InstanceType": {
+            "Ref": "InstanceType"
+          },
+          "IamInstanceProfile": {
+            "Arn": {
+              "Fn::GetAtt": [
+                "WorkerProfile",
+                "Arn"
+              ]
+            }
+          },
+          "MetadataOptions": {
+            "HttpTokens": "required",
+            "HttpPutResponseHopLimit": 1
+          },
+          "CreditSpecification": {
+            "CpuCredits": "standard"
+          },
+          "BlockDeviceMappings": [
+            {
+              "DeviceName": "/dev/sda1",
+              "Ebs": {
+                "VolumeSize": 20,
+                "VolumeType": "gp3",
+                "Encrypted": true,
+                "DeleteOnTermination": true
+              }
+            }
+          ],
+          "NetworkInterfaces": [
+            {
+              "DeviceIndex": 0,
+              "AssociatePublicIpAddress": true,
+              "Groups": [
+                {
+                  "Ref": "WorkerSecurity"
+                }
+              ]
+            }
+          ],
+          "UserData": {
+            "Fn::Base64": {
+              "Fn::Sub": "#!/bin/bash\nset -euo pipefail\nexport DEBIAN_FRONTEND=noninteractive\napt-get update -qq\napt-get install -y -qq curl unzip ca-certificates\ncurl -fsS https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip -o /tmp/aws.zip\nunzip -q /tmp/aws.zip -d /tmp\n/tmp/aws/install\nmkdir -p /opt/prashn\naws s3 cp 's3://${ArtifactBucket}/${ArtifactKey}' /tmp/prashn.tar.gz --region '${AWS::Region}' --only-show-errors\necho '${ArtifactDigest}  /tmp/prashn.tar.gz' | sha256sum -c -\ntar -xzf /tmp/prashn.tar.gz -C /opt/prashn\nexport AWS_REGION='${AWS::Region}' DOCUMENT_BUCKET='${Documents}' DYNAMODB_TABLE='${Data}' PROCESSING_QUEUE_URL='${Jobs}'\nexport JWT_PARAMETER='${JwtParameter}' LOG_GROUP='${ApplicationLogs}' ENTRY='worker.js' STACK_NAME='${AWS::StackName}' LOGICAL_RESOURCE='WorkerGroup'\nbash /opt/prashn/infra/bootstrap.sh\nstate=$(aws cloudformation describe-stacks --stack-name \"$STACK_NAME\" --query 'Stacks[0].StackStatus' --output text --region \"$AWS_REGION\")\nif [[ \"$state\" == CREATE_IN_PROGRESS || \"$state\" == UPDATE_IN_PROGRESS ]]; then\n  aws cloudformation signal-resource --stack-name \"$STACK_NAME\" --logical-resource-id \"$LOGICAL_RESOURCE\" --unique-id \"$(hostname)\" --status SUCCESS --region \"$AWS_REGION\"\nfi\n"
+            }
+          }
+        }
+      }
+    },
+    "WorkerGroup": {
+      "Type": "AWS::AutoScaling::AutoScalingGroup",
+      "Properties": {
+        "MinSize": "1",
+        "MaxSize": {
+          "Ref": "MaxInstances"
+        },
+        "DesiredCapacity": "1",
+        "VPCZoneIdentifier": {
+          "Ref": "SubnetIds"
+        },
+        "DefaultInstanceWarmup": 300,
+        "LaunchTemplate": {
+          "LaunchTemplateId": {
+            "Ref": "WorkerLaunch"
+          },
+          "Version": {
+            "Fn::GetAtt": [
+              "WorkerLaunch",
+              "LatestVersionNumber"
+            ]
+          }
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Sub": "${AWS::StackName}-worker"
+            },
+            "PropagateAtLaunch": true
+          }
+        ]
+      },
+      "CreationPolicy": {
+        "ResourceSignal": {
+          "Count": 1,
+          "Timeout": "PT20M"
+        }
+      },
+      "UpdatePolicy": {
+        "AutoScalingRollingUpdate": {
+          "MinInstancesInService": 1,
+          "MaxBatchSize": 1,
+          "PauseTime": "PT20M",
+          "WaitOnResourceSignals": true
+        }
+      }
+    },
+    "QueueScaling": {
+      "Type": "AWS::AutoScaling::ScalingPolicy",
+      "Properties": {
+        "AutoScalingGroupName": {
+          "Ref": "WorkerGroup"
+        },
+        "PolicyType": "StepScaling",
+        "AdjustmentType": "ChangeInCapacity",
+        "EstimatedInstanceWarmup": 300,
+        "StepAdjustments": [
+          {
+            "MetricIntervalLowerBound": 0,
+            "ScalingAdjustment": 1
+          }
+        ]
+      }
+    },
+    "QueueBacklog": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "Namespace": "AWS/SQS",
+        "MetricName": "ApproximateNumberOfMessagesVisible",
+        "Dimensions": [
+          {
+            "Name": "QueueName",
+            "Value": {
+              "Fn::GetAtt": [
+                "Jobs",
+                "QueueName"
+              ]
+            }
+          }
+        ],
+        "Statistic": "Average",
+        "Period": 60,
+        "EvaluationPeriods": 2,
+        "Threshold": 3,
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+        "TreatMissingData": "notBreaching",
+        "AlarmActions": [
+          {
+            "Ref": "QueueScaling"
+          }
+        ]
+      }
+    },
+    "QueueIdleScaling": {
+      "Type": "AWS::AutoScaling::ScalingPolicy",
+      "Properties": {
+        "AutoScalingGroupName": {
+          "Ref": "WorkerGroup"
+        },
+        "PolicyType": "StepScaling",
+        "AdjustmentType": "ChangeInCapacity",
+        "EstimatedInstanceWarmup": 300,
+        "StepAdjustments": [
+          {
+            "MetricIntervalUpperBound": 0,
+            "ScalingAdjustment": -1
+          }
+        ]
+      }
+    },
+    "QueueIdle": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "Metrics": [
+          {
+            "Id": "visible",
+            "MetricStat": {
+              "Metric": {
+                "Namespace": "AWS/SQS",
+                "MetricName": "ApproximateNumberOfMessagesVisible",
+                "Dimensions": [
+                  {
+                    "Name": "QueueName",
+                    "Value": {
+                      "Fn::GetAtt": [
+                        "Jobs",
+                        "QueueName"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "Period": 60,
+              "Stat": "Maximum"
+            },
+            "ReturnData": false
+          },
+          {
+            "Id": "inflight",
+            "MetricStat": {
+              "Metric": {
+                "Namespace": "AWS/SQS",
+                "MetricName": "ApproximateNumberOfMessagesNotVisible",
+                "Dimensions": [
+                  {
+                    "Name": "QueueName",
+                    "Value": {
+                      "Fn::GetAtt": [
+                        "Jobs",
+                        "QueueName"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "Period": 60,
+              "Stat": "Maximum"
+            },
+            "ReturnData": false
+          },
+          {
+            "Id": "backlog",
+            "Expression": "visible + inflight",
+            "ReturnData": true
+          }
+        ],
+        "EvaluationPeriods": 10,
+        "Threshold": 1,
+        "ComparisonOperator": "LessThanThreshold",
+        "TreatMissingData": "notBreaching",
+        "AlarmActions": [
+          {
+            "Ref": "QueueIdleScaling"
+          }
+        ]
+      }
+    },
+    "DeadLetterAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "Namespace": "AWS/SQS",
+        "MetricName": "ApproximateNumberOfMessagesVisible",
+        "Dimensions": [
+          {
+            "Name": "QueueName",
+            "Value": {
+              "Fn::GetAtt": [
+                "DeadLetters",
+                "QueueName"
+              ]
+            }
+          }
+        ],
+        "Statistic": "Maximum",
+        "Period": 60,
+        "EvaluationPeriods": 1,
+        "Threshold": 1,
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+        "TreatMissingData": "notBreaching"
+      }
+    },
+    "ApiErrors": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "Namespace": "AWS/ApiGateway",
+        "MetricName": "5xx",
+        "Dimensions": [
+          {
+            "Name": "ApiId",
+            "Value": {
+              "Ref": "HttpApi"
+            }
+          },
+          {
+            "Name": "Stage",
+            "Value": "$default"
+          }
+        ],
+        "Statistic": "Sum",
+        "Period": 60,
+        "EvaluationPeriods": 2,
+        "Threshold": 5,
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+        "TreatMissingData": "notBreaching"
+      }
+    }
+  },
+  "Outputs": {
+    "WebsiteUrl": {
+      "Value": {
+        "Fn::Sub": "https://${Distribution.DomainName}"
+      }
+    },
+    "DistributionId": {
+      "Value": {
+        "Ref": "Distribution"
+      }
+    },
+    "DocumentBucket": {
+      "Value": {
+        "Ref": "Documents"
+      }
+    },
+    "FrontendBucket": {
+      "Value": {
+        "Ref": "Frontend"
+      }
+    },
+    "DataTable": {
+      "Value": {
+        "Ref": "Data"
+      }
+    },
+    "QueueUrl": {
+      "Value": {
+        "Ref": "Jobs"
+      }
+    },
+    "DeadLetterQueue": {
+      "Value": {
+        "Ref": "DeadLetters"
+      }
+    },
+    "ApiGroup": {
+      "Value": {
+        "Ref": "ApiGroup"
+      }
+    },
+    "WorkerGroup": {
+      "Value": {
+        "Ref": "WorkerGroup"
+      }
+    },
+    "ApplicationLogGroup": {
+      "Value": {
+        "Ref": "ApplicationLogs"
+      }
+    },
+    "ApiUrl": {
+      "Value": {
+        "Fn::Sub": "https://${HttpApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}"
+      }
+    }
+  }
+}

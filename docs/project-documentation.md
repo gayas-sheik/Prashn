@@ -320,8 +320,9 @@ Backend configuration loads `backend/.env`. Shell environment variables can also
 | `OCR_MODE` | `auto`; `always` forces PDF OCR |
 | `OLLAMA_MODEL` | Empty selects the default extractive answerer |
 | `OLLAMA_URL` | `http://127.0.0.1:11434`; used only by the optional provider |
-| `STORAGE_MODE` | `local`; other values are rejected |
-| `DATABASE_MODE`, `PROCESSING_MODE`, `CLASSIFICATION_MODE` | Default to `local`; names alone do not implement alternate backends |
+| `STORAGE_MODE` | `local` by default; optional `s3` with the complete AWS mode tuple |
+| `DATABASE_MODE`, `PROCESSING_MODE` | `local/local` by default; optional `dynamodb/sqs` with S3 and required AWS resource configuration |
+| `CLASSIFICATION_MODE` | Local classifier retained; setting a different name does not install another classifier |
 | `VITE_API_BASE_URL` | Frontend API base, otherwise `/api` |
 | `PRASHN_API_TARGET` | Vite proxy target, otherwise `http://localhost:5000` |
 

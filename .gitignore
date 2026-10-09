@@ -34,5 +34,6 @@ backend/data/development/*.db
 *.sqlite3
 .npm-cache/
 .test-output/
+.aws-build/
 *.db-shm
 *.db-wal

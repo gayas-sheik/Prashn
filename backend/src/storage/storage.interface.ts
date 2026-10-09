@@ -1,3 +1,5 @@
+import { Response } from 'express';
+
 export interface StorageProvider {
   /**
    * Save a file to storage
@@ -20,4 +22,8 @@ export interface StorageProvider {
    * @param storageKey The key returned by saveFile
    */
   deleteFile(storageKey: string): Promise<void>;
+  withLocalFile<T>(storageKey: string, consume: (filePath: string) => Promise<T>): Promise<T>;
+  sendFile(storageKey: string, response: Response): Promise<void>;
+  saveProcessedText(documentId: string, text: string): Promise<void>;
+  deleteProcessed(documentId: string): Promise<void>;
 }

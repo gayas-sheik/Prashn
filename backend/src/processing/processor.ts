@@ -1,14 +1,11 @@
 import { DocumentRepository } from '../repositories/document.repository';
 import { ActivityRepository } from '../repositories/activity.repository';
 import { getStorageProvider } from '../storage/storage.factory';
-import { randomUUID, createHash } from 'crypto';
+import { randomUUID } from 'crypto';
 import { DocumentStatus } from '../types';
-import { LocalExtractor } from './local.extractor';
-import { LocalClassifier } from './local.classifier';
-import { StructuredFieldExtractor } from './field_extractor';
-import fs from 'fs';
-import path from 'path';
 import { config } from '../config/env';
+import { analyzeDocument } from './pipeline';
+import { CloudDocumentDispatcher } from './sqs.processor';
 
 const documents = new DocumentRepository();
 const activity = new ActivityRepository();
@@ -67,23 +64,13 @@ export class DocumentProcessor {
   private async process(id: string, userId: string): Promise<void> {
     const doc = await documents.findByIdAndUserId(id, userId);
     if (!doc || this.cancelled.has(id)) return;
-    const started = Date.now();
     try {
       await this.status(id, userId, 'Processing');
-      const filePath = await storage.getFileUrl(doc.storageKey);
-      const extracted = await new LocalExtractor().extractText(filePath, doc.mimeType);
-      await this.status(id, userId, 'Classifying');
-      const classified = new LocalClassifier().classify(extracted.text);
-      await this.status(id, userId, 'Extracting information');
-      const structured = new StructuredFieldExtractor().extractFields(extracted.text, classified.type, extracted.pages);
-      // Retain the complete original extraction for inspection and later cloud migration.
-      await fs.promises.mkdir(config.processedDir, { recursive: true });
-      await fs.promises.writeFile(path.join(config.processedDir, `${id}.txt`), extracted.text, 'utf8');
-      const sha256 = createHash('sha256').update(await fs.promises.readFile(filePath)).digest('hex');
-      await documents.updateDocument({ id, ...structured, pages: extracted.pages, pagesCount: extracted.pagesCount,
-        documentType: classified.type, confidence: Math.round(classified.confidence * 100), sha256,
-        extractedSummary: structured.extractedFields.length ? structured.extractedFields.slice(0, 3).map(field => `${field.label}: ${field.value}`).join(' · ') : extracted.text.replace(/\s+/g, ' ').slice(0, 250),
-        processingDuration: `${((Date.now() - started) / 1000).toFixed(1)}s`,
+      await storage.withLocalFile(doc.storageKey, async filePath => {
+        const result = await analyzeDocument(filePath, doc, status => this.status(id, userId, status));
+        await storage.saveProcessedText(id, result.text);
+        const { text: _text, ...content } = result.content;
+        await documents.updateDocument({ id, ...result.metadata, ...content });
       });
       await this.status(id, userId, 'Completed');
     } catch (error: any) {
@@ -92,4 +79,4 @@ export class DocumentProcessor {
   }
 }
 
-export const documentProcessor = new DocumentProcessor();
+export const documentProcessor = config.processingMode === 'sqs' ? new CloudDocumentDispatcher() : new DocumentProcessor();
