@@ -1,264 +1,457 @@
-# Prashn: Project Documentation
+# Prashn application documentation
 
-**Project topic:** Cloud-Native Intelligent Document Processing and Question Answering Platform  
-**Status date:** 9 October 2026  
-**Current scope:** Local application; custom model training and cloud deployment are deferred.  
-**Repository:** https://github.com/gayas-sheik/Prashn  
-**Working checkout:** `Prashn-latest`; application repairs build on upstream commit `a15b25b`.
+**Purpose:** document processing and document-grounded question answering.
 
-## 1. Abstract
+**Implementation described:** React frontend, Express backend, SQLite, filesystem storage, PDF.js and Tesseract.js.
 
-Prashn allows authenticated users to upload PDFs and images, extract readable text, inspect structured information, and ask questions grounded in a selected document. The local implementation combines a React interface, an Express API, SQLite, filesystem storage, native PDF extraction and Tesseract OCR. It preserves the original upload and complete extracted content, rather than retaining only recognized fields.
+**Documentation date:** 9 October 2026.
 
-The cloud computing objective is to evolve this workflow into an asynchronous AWS system with durable object storage, message queues, independent processing workers, monitoring and infrastructure as code. Those cloud capabilities are a proposed next phase; they are not deployed in the current application.
+Prashn accepts supported document files, extracts their text and recognizable structured information, and answers supported questions with source citations. Processing takes place on the machine running the backend. The standard setup is local. Optional AWS hosting and integration are described separately in the [deployment guide](aws-architecture.md); they are not current application features or prerequisites.
 
-## 2. Problem and objectives
+## Contents
 
-Invoices, receipts and forms contain useful information that users otherwise read manually. PDF drawing order, scanned pages and varied layouts make extraction difficult. A successful application must preserve evidence, associate labels with the right values, and refuse questions for which evidence is absent.
+- [Purpose and supported documents](#purpose-and-supported-documents)
+- [Features and application screens](#features-and-application-screens)
+- [Architecture and repository](#architecture-and-repository)
+- [Installation and running](#installation-and-running)
+- [Processing and extraction](#processing-and-extraction)
+- [Question answering](#question-answering)
+- [Accounts and access](#accounts-and-access)
+- [Data storage and maintenance](#data-storage-and-maintenance)
+- [Configuration](#configuration)
+- [API reference](#api-reference)
+- [Testing and validation](#testing-and-validation)
+- [Troubleshooting](#troubleshooting)
+- [Limitations and future work](#limitations-and-future-work)
+- [Optional AWS deployment](#optional-aws-deployment)
 
-The objectives are to:
+## Purpose and supported documents
 
-- Accept supported documents and report upload and processing failures clearly.
-- Extract digital PDF text and OCR scanned documents page by page.
-- Identify document types and source-backed fields and line items.
-- Preserve full text, page provenance and original files.
-- Answer supported questions with citations to the selected document.
-- Isolate users' documents, conversations and activity.
-- Provide an architecture that can later support cloud storage and distributed processing.
+Users can upload invoices, receipts, application forms, IDs and other semi-structured files as PDF, PNG or JPEG. The application preserves the original and complete text so that recognized fields do not become the only available evidence.
 
-## 3. Scope and current capabilities
-
-| Area | Current behavior | Practical limit |
+| Document content | Implemented behavior | Boundary |
 | --- | --- | --- |
-| Accounts | Registration, login, JWT session restoration and logout | No password reset, MFA or token revocation workflow |
-| Upload | PDF, PNG and JPEG; single and batch API uploads; automatic result tracking | 10 MiB per file; UI and batch API maximum 20 files |
-| Processing | Bounded background queue, status reporting, retry and startup recovery | Queue operates within one backend process |
-| Extraction | Native PDF reading order reconstruction; real English OCR for images/scanned pages | Unfamiliar layouts, low quality scans and handwriting need review |
-| Classification | Invoice, Receipt, Form, Contract or Unknown | Keyword heuristics, not a trained classifier |
-| Structured data | Common labels, explicit key/value and column pairs, supported line item tables | No guarantee that every field or complex table will be recognized |
-| Q&A | Fields, supported cost/date phrasing, named/ordinal items, summaries and matching passages | Limited paraphrases, reasoning and follow-up understanding |
-| Document management | Original preview/download, full text, reprocessing and deletion | No document editing or version management |
-| Dashboard | Actual user document counts, processing states and activity | No live AWS telemetry |
-| Settings | Theme preference | Other unfinished controls are read-only/planned |
-| Cloud | Interfaces and migration plan | AWS adapters and deployment are not implemented |
+| Invoices | Supported identifiers, parties, dates, amounts, payment labels and item tables | Layout and label recognition are heuristic |
+| Receipts | Supported receipt identifiers, dates, store and payment/amount fields | Unfamiliar layouts may lose structured fields |
+| Application forms | Names, date of birth, contact information and explicit fields | No universal form schema or form-submission workflow |
+| Contracts / agreements | Text, explicit fields and matching passages | No legal interpretation or document approval workflow |
+| IDs | Text/OCR and supported explicit fields | No dedicated ID classifier, identity verification or MRZ/barcode decoding |
+| Other readable documents | Full text and supported explicit key/value fields | Classification may be Unknown or another heuristic category |
 
-No custom ML model or Ollama service is required for the selected mode. Tesseract itself uses existing trained OCR language data; this is different from training or hosting a new document/Q&A model.
+The classifier's categories are `Invoice`, `Receipt`, `Form`, `Contract` and `Unknown`. An ID is not guaranteed a particular category. A file can contain multiple document entries, and recognized repeated values remain associated with their pages. Classification does not establish authenticity or accuracy.
 
-## 4. Local architecture
+### Accepted files and limits
 
-```mermaid
+| Constraint | Default |
+| --- | --- |
+| Accepted MIME types | `application/pdf`, `image/png`, `image/jpeg` |
+| Maximum file size | 10 MiB: `10 * 1024 * 1024` bytes |
+| Maximum selected files / batch API files | 20 |
+| Maximum PDF pages | 100; configured with `MAX_DOCUMENT_PAGES` |
+| OCR language | English; additional local trained data must be supplied for other languages |
+| Maximum question length | 4,000 characters, with nonempty content |
+| Processing concurrency | Two documents within one backend process |
+
+DOCX, spreadsheets and other unsupported MIME types are rejected. File acceptance is not a guarantee that a document is readable: corrupt, protected and unreadable files can fail during processing. The frontend displays size limits as "10 MB" while the actual enforced size is 10 MiB.
+
+## Features and application screens
+
+| Screen | What it does |
+| --- | --- |
+| Login | Register an account or sign in; restore an existing valid session |
+| Dashboard | Show actual document counts, processing states, storage totals and recent activity for the signed-in account |
+| Upload | Select files, report upload errors, track processing and show results |
+| Documents | Browse, filter and inspect owned documents; filtering/pagination are handled in the client |
+| Document inspection | Preview/download the original; inspect fields, supported items, full text and extraction JSON; export results, reprocess or delete |
+| Document Q&A | Ask questions, inspect source snippets/page citations, revisit history and export or clear a conversation |
+| Processing queue | Inspect current document processing states |
+| Activity | Review owned upload, processing, retry and deletion events |
+| Settings | Change the theme; other unfinished settings are displayed as planned or read-only |
+
+Only theme selection has implemented persistent preferences. Profile editing, password management, multi-device session management and external notifications are not completed features.
+
+### Typical user workflow
+
+1. Register and sign in.
+2. Select **Single Document Quick Inspect** for one file, or **Batch Upload** for a selection.
+3. Select supported files and choose **Upload / Retry Files**.
+4. Wait for a processing result. Single-file success opens its inspection page automatically; multiple-file results remain on the upload page.
+5. Compare extracted values with the original preview and Full Text. Use **View Full Results** or **Ask Questions** from a completed batch result.
+6. Ask a question and inspect its citations. Use a page selector in the question when several pages contain similar values.
+7. Use **Retry Processing** for a failed document or **Reprocess** to apply newer extraction logic to an existing document.
+
+Upload-request retry and processing retry are different actions. A successful upload means the bytes were accepted, not that extraction succeeded. Retrying a corrupt PDF can correctly fail again until a readable source is uploaded. Removing a file from the upload selection does not delete an already accepted document.
+
+The upload UI currently sends selected files through individual single-file requests and tracks each returned document. A separate multiple-file API endpoint also exists. Neither interface promises that a group of uploads is one atomic transaction.
+
+## Architecture and repository
+
+~~~mermaid
 flowchart TD
-    U[User] --> F[React / Vite frontend]
-    F -->|HTTP /api with Bearer JWT| A[Express API]
+    U[User] --> F[React frontend]
+    F -->|HTTP /api with bearer token| A[Express API]
     A --> R[Repositories]
     R --> D[(SQLite)]
-    A --> S[StorageProvider]
+    A --> S[Storage provider]
     S --> O[(Original files)]
-    A --> Q[Bounded local processing queue]
-    Q --> E[PDF.js layout extraction / Tesseract OCR]
-    E --> C[Heuristic classification]
-    C --> X[Structured field extraction]
-    X --> R
-    E --> T[(Complete extracted text files)]
-    A --> N[Extractive document answerer]
+    A --> Q[Bounded processing queue]
+    Q --> E[PDF layout extraction and OCR]
+    E --> C[Classification and field extraction]
+    C --> R
+    E --> T[(Complete extracted text)]
+    A --> N[Extractive question answerer]
     R --> N
-    N -->|Answer and page citations| A
-```
+    N -->|Answer with citations| A
+~~~
 
-The frontend calls `/api`. Vite proxies these requests to the backend during local development. Controllers validate requests and ownership; repositories manage database access; the processing service orchestrates extraction; the storage interface handles files. These boundaries support future replacement of local services, but migration still requires implementation and testing.
+Vite forwards `/api` requests to the backend during development and local preview. Controllers enforce request and ownership rules; repositories handle persistence; the processor orchestrates extraction and state changes. Storage and extraction concerns are separated, but alternative implementations still require code and validation.
 
-## 5. Technology and repository map
-
-| Component | Technology / location |
+| Location | Responsibility |
 | --- | --- |
-| Frontend | React, TypeScript, Vite, React Router, Tailwind CSS; `src/` |
-| Backend | Node.js, Express, TypeScript; `backend/src/` |
-| PDF text/layout | `pdfjs-dist`, `pdf.layout.ts`, `local.extractor.ts` |
-| PDF rendering and image inspection | `pdf-parse` |
-| OCR | `tesseract.js`, bundled `@tesseract.js-data/eng` |
-| Authentication | bcrypt password hashes and signed JWTs |
-| Database | SQLite via `sqlite` and `sqlite3` |
-| Original storage | `backend/storage/uploads/` by default |
-| Complete extraction | `backend/storage/processed/[document-id].txt` |
-| Regression tests | `backend/tests/workflow.test.cjs`, generated fixtures |
+| `src/App.tsx` and `src/routes/AppRoutes.tsx` | Frontend entry and page routes |
+| `src/context/` | Authentication and theme state |
+| `src/services/api/` | Requests and API-to-UI data mapping |
+| `src/pages/` and `src/components/` | Screens and reusable UI |
+| `backend/src/server.ts` | Database initialization, pending-job recovery and server startup |
+| `backend/src/app.ts` | Express configuration, health, routing and error handling |
+| `backend/src/controllers/` and `backend/src/routes/` | API behavior |
+| `backend/src/repositories/` and `backend/src/database/` | SQLite persistence and schema initialization |
+| `backend/src/storage/` | Original-file storage |
+| `backend/src/processing/processor.ts` | Queue, recovery, status updates and orchestration |
+| `backend/src/processing/local.extractor.ts` | Native PDF extraction and OCR |
+| `backend/src/processing/pdf.layout.ts` | Reconstruct visual text rows and significant gaps |
+| `backend/src/processing/field_extractor.ts` | Fields, aliases, values, line items and provenance |
+| `backend/src/processing/document.answerer.ts` | Document-grounded answers and source citations |
+| `backend/src/processing/question.language.ts` | Bounded phrasing and follow-up resolution |
+| `backend/tests/` | Regression tests and fictional fixture generators |
 
-Key frontend modules are `src/context/AuthContext.tsx`, `src/services/api/`, the Upload, DocumentDetails and DocumentQA pages, and `OriginalDocumentPreview.tsx`. Backend routes, controllers, repositories, processing and storage each have their own directories.
+## Installation and running
 
-## 6. Processing workflow
+### Prerequisites
 
-1. Authenticate and upload a supported file. The backend saves the original and creates an owned document record.
-2. Queue the job. Default concurrency is two documents; pending work can be recovered after restart.
-3. Read PDF text using page coordinates so visually adjacent labels and values remain associated even when PDF drawing instructions have a different order.
-4. OCR images and detected scanned PDF pages. `OCR_MODE=always` can force OCR when a PDF's selectable text layer is incomplete.
-5. Classify the extracted content and extract supported fields and line items without substituting invented amounts or currency.
-6. Save full text, individual page content, extraction method, field provenance, a file checksum and processing metadata.
-7. Mark the document completed and record activity. On errors, retain a failure reason and allow retry.
+Install Node.js and npm compatible with the locked packages. Node.js 22.14 was used in recorded verification. Installed Vite requires `^20.19.0 || >=22.12.0`, pdf-parse requires `>=20.16.0 <21 || >=22.3.0`, and sqlite3 requires `>=20.17.0`. Use `npm ci` to install the lockfile rather than selecting new package versions.
 
-The normal backend states are `Uploaded`, `Queued`, `Processing`, `Classifying`, `Extracting information`, then `Completed`. Errors produce `Failed`. Upload success is separate from processing completion.
+SQLite, bcrypt and canvas include native components. Install/build dependencies for the operating system and architecture that will run the backend; do not copy Windows `node_modules` to a Linux host. Native compilation tools may be needed if a suitable prebuilt package is unavailable.
 
-Empty/unreadable documents, corrupt PDFs and protected PDFs produce errors. The default PDF page limit is 100. Successful extraction does not establish that every character or field is accurate.
+The normal application and backend regression suite do not require Python. The optional evaluation generator requires Python with reportlab and Pillow and currently uses `C:/Windows/Fonts/arial.ttf`. The default OCR engine uses bundled English trained data. The application does not automatically install an inference model.
 
-## 7. Q&A behavior
+### Install a fresh checkout
 
-Questions are evaluated against the selected user's completed document. The answerer checks structured fields and line items, then searches the preserved page text for relevant passages. A citation identifies the source filename, page, section and supporting snippet.
-
-Examples of supported requests include:
-
-- “What is the total amount?”, “What is the cost?” and “How much is it?”
-- “What is the invoice number?” and “What is the date provided?”
-- “What is the payment method?” and “How much was paid?” when those facts are present.
-- “How many laptops were purchased?” and “What is the second item's price?” for recognized line items.
-- “Summarize this document” and questions matching an explicit field or source passage.
-
-An invoice total does not establish payment status. A tax rate is distinct from a tax amount; a GST identifier is distinct from tax. When multiple recognized values match a question, the answer can list the values and their pages rather than choosing one silently.
-
-If evidence is missing, the response is: **“I couldn't find that information in this document.”** Conversation messages are persisted. Explicit page follow-ups such as “And on page 3?” and unambiguous party references such as “What is their phone number?” use the preceding successfully cited turn. Ambiguous references such as “and the other one?” still refuse. Conversation context selects a source page or party; answers remain grounded in the document. Documents with legacy records lacking page text must be reprocessed before Q&A.
-
-## 8. Data model and persistence
-
-| Entity | Stored information |
-| --- | --- |
-| `users` | ID, normalized email, password hash, full name, role and timestamps |
-| `documents` | Owner, file metadata/storage key, status/type, page count, summary, checksum, failure reason, JSON fields/items/pages |
-| `qa_messages` | Document and owner IDs, sender, text, timestamps and JSON citations |
-| `activity_events` | Owner, document reference, event, status, actor, details and timestamps |
-
-Each extracted page contains its page number, text, `text` or `ocr` method and optional OCR confidence. Fields and line items may contain their source page and snippet. Field confidence is a heuristic fraction; document classification and OCR scores use their respective percentage conventions. These values are not calibrated accuracy probabilities.
-
-SQLite uses WAL, foreign keys and a busy timeout. Startup adds the page-content column to older schemas. Document deletion removes associated question messages and extracted text; deletion activity remains as an audit entry. Original files and database metadata both matter for restoration: back up the database and storage together while the backend is stopped, or use a SQLite-aware backup procedure.
-
-## 9. Local setup and launch
-
-Use Node.js and npm compatible with the locked dependencies. A recent Node.js LTS release is suitable; check package engine requirements when installing on another machine. The workspace has two folders: current work is in **`Prashn-latest`**, while the original `Prashn` folder was retained.
-
-In PowerShell, install frontend dependencies:
-
-```powershell
-cd 'C:\Users\rithv\Downloads\Cloud_computing_project(Prashn)\Prashn-latest'
+~~~bash
+git clone https://github.com/gayas-sheik/Prashn.git
+cd Prashn
 npm ci
-```
-
-Install and configure the backend:
-
-```powershell
 cd backend
 npm ci
-```
+~~~
 
-Create `backend/.env` from `.env.example` if no `.env` already exists. Set a private `JWT_SECRET` and keep `OLLAMA_MODEL=` empty. Do not overwrite an existing environment file containing local configuration.
+The repository root means the directory containing the frontend `package.json`. Its folder name can differ. Create `backend/.env` from `backend/.env.example` only if an environment file does not already exist. Set a private random `JWT_SECRET` and leave `OLLAMA_MODEL=` empty for the default mode. Keep the environment file out of version control.
 
-Start the backend in one terminal:
+### Development
 
-```powershell
-cd 'C:\Users\rithv\Downloads\Cloud_computing_project(Prashn)\Prashn-latest\backend'
+In a terminal inside `backend/`:
+
+~~~bash
 npm run dev
-```
+~~~
 
-Start the frontend in a second terminal:
+In another terminal inside the repository root:
 
-```powershell
-cd 'C:\Users\rithv\Downloads\Cloud_computing_project(Prashn)\Prashn-latest'
+~~~bash
 npm run dev
-```
+~~~
 
-Open the URL printed by Vite, normally `http://localhost:5173`. Default backend health is `http://localhost:5000/api/health`. Register an account, log in, upload a document, wait for completion, inspect Full Text and extracted fields, then ask a question. `Ctrl+C` stops a terminal's server.
+The backend command rebuilds TypeScript and launches the compiled server, watching source changes. Open Vite's printed frontend URL, normally `http://localhost:5173`. The backend defaults to `http://localhost:5000`; `http://localhost:5000/api/health` should respond. Stop each server with `Ctrl+C`.
 
-After a single-file upload, the upload screen tracks the actual processing status and automatically opens that document's results when it completes. For multiple files, completed fields, recognized line items and text previews appear directly on the upload screen. Each result also provides Full Results and Ask Questions actions. Processing failures remain visible with a retry action; upload success does not imply processing success. Polling requests are cancelled when leaving the page.
+### Compiled builds and local preview
 
-For a compiled backend, use `npm run build` then `npm start`. This server must be restarted after rebuilding. Frontend `npm run build` writes `dist/`; `npm run preview` serves a local build preview, not a production hosting configuration.
+Backend, from `backend/`:
 
-If testing on alternate ports, set `PORT` for the backend and `PRASHN_API_TARGET` for Vite. A session preview used frontend 5174 and backend 5050; these are not the application's default ports.
+~~~bash
+npm run build
+npm start
+~~~
 
-## 10. Configuration reference
+Frontend, from the repository root:
 
-| Variable | Default / purpose |
+~~~bash
+npm run build
+npm run preview
+~~~
+
+Vite preview is for inspecting a local build. It is not a complete production hosting configuration. For a hosted installation, serve the frontend build with an appropriate web server and route `/api` to the backend, or set `VITE_API_BASE_URL` before building.
+
+Rebuild and restart a compiled backend after code changes. Existing document records keep their saved extraction until reprocessed. Both servers must use the same intended checkout. The health response includes the repository folder as `workspace` and an `extractionVersion` marker, currently `layout-fields-v2`; these help diagnose a mismatched backend, but health is not a comprehensive readiness test.
+
+### Alternate ports
+
+Set backend `PORT` in its environment. Set `PRASHN_API_TARGET` in the shell launching Vite, for example `http://localhost:5050`, so its proxy targets that backend. If browser requests are cross-origin, set `CORS_ORIGIN` to the actual frontend origin. Refer to the printed Vite URL rather than assuming an unavailable port was used. Session-specific test ports are not application defaults.
+
+## Processing and extraction
+
+### Processing states
+
+The backend workflow normally progresses through:
+
+~~~text
+Uploaded -> Queued -> Processing -> Classifying -> Extracting information -> Completed
+~~~
+
+Errors produce `Failed` and a saved failure reason. `Ready` and `Uploading` are frontend staging/request states. Queue positions and transitions are not progress guarantees or extraction-accuracy estimates.
+
+The queue limits concurrent work within one backend process. Startup recovers persisted pending document records and queues their stored originals again. This recovery does not provide distributed scheduling across multiple API servers. Reprocessing is accepted for `Completed` or `Failed` documents; requests for already active documents return a conflict.
+
+### Text extraction
+
+1. Read PDF text using page coordinates rather than PDF drawing order.
+2. Reconstruct visual rows and preserve large vertical gaps as text boundaries.
+3. Detect pages needing OCR, including low-text pages and some image pages with short selectable headers.
+4. OCR images or rendered PDF pages with Tesseract.js.
+5. For weak OCR, retry quarter-turn orientations on an expanded canvas and keep the more readable candidate.
+6. Preserve complete text and each page's extraction method/provenance.
+
+`OCR_MODE=always` forces OCR for PDF pages when automatic detection is insufficient. It can take longer and is not a promise of improved accuracy for every file. Existing extracted records must be reprocessed after changing the mode. English OCR, clear scans and machine-printed text are the normal validated path; handwriting and other languages need separate evaluation.
+
+### Classification and structured information
+
+The classifier scores keywords and returns one of the supported categories. Field extraction uses label aliases, explicit key/value pairs, column relationships and supported table patterns. Common fields include identifiers, dates, parties, contacts, addresses, totals, tax, discounts and payment details when printed in a recognizable form. Supported line items contain description, quantity, unit price and amount.
+
+Repeated recognized fields remain present across pages, including identical values. Page references and verbatim snippets connect structured values to the source text. Multiline values are retained where the parser recognizes a continuation; significant gaps can stop a field from consuming a distant footer. The parser does not invent totals, currency or OCR corrections to fill missing information.
+
+The document includes a SHA-256 checksum of its stored original. This helps compare bytes; it does not prove who created the document or whether its contents are true.
+
+Confidence values have different conventions: field confidence is a heuristic fraction, classification confidence is displayed as a percentage, and OCR uses its engine's confidence score. These are not calibrated probabilities of correctness. Review results against the original.
+
+## Question answering
+
+The default answerer is extractive. It checks structured fields and line items and retrieves relevant passages from the preserved page text. It does not train a model, call an external inference endpoint or require a vector database in the default setup.
+
+| Request | Behavior when supported evidence exists |
 | --- | --- |
-| `PORT` | Backend port, `5000` |
-| `NODE_ENV` | `development`; production requires an explicit JWT secret |
-| `JWT_SECRET` | Token signing secret; set a private value |
+| Identifiers and parties | Return recognized invoice/receipt numbers, vendor, buyer or form fields |
+| Costs and dates | Return recognized totals, subtotal, tax, invoice/due dates and payment fields |
+| Items | Answer supported quantity, unit-price, amount, named-item and ordinal-item questions |
+| Repeated information | List recognized matching values with their pages |
+| Page selection | Restrict `on page 2` and similar explicit selectors to that page |
+| Summary | List recognized fields/items or return bounded document excerpts |
+| Passage questions | Return matching source passages, such as a printed warranty or delivery statement |
+
+Examples include "How much do I owe?", "When is payment due?", "How much did the customer pay?", "What does one mouse cost?" and "What is the total on page 2?" when the relevant content is present and recognized.
+
+### Follow-ups and refusal
+
+"And on page 3?" can inherit the preceding question's requested attribute. A party follow-up such as "What is their phone number?" can use the preceding unambiguous, successfully cited party answer. Pronoun-based resolution requires a single cited source on one page; ambiguous or missing antecedents refuse. Saved user questions remain the original text, not the internally resolved wording.
+
+Conversation history selects a page or party; it never supplies answer facts. A missing page, absent attribute, unknown product or unsupported request should return:
+
+> I couldn't find that information in this document.
+
+Refusals have no citations. The supported phrasing is bounded: arbitrary paraphrases, arithmetic, broad reasoning and multi-document conversations are not general capabilities. An invoice total does not establish payment; a tax rate is not a tax amount; an identifier is not a date. A warranty's scope alone does not establish its duration.
+
+### Citations and readiness
+
+A citation contains the original filename, page, section, supporting snippet and heuristic confidence. It indicates the source used by the engine, not independently verified truth. Important answers should be checked against both the snippet and original preview.
+
+Questions require a `Completed` document with retained page content. An active document or legacy record lacking page text produces HTTP `409`; wait or reprocess before asking. The optional Ollama provider hook is dormant by default. It needs a separately configured running service/model and has only mocked provider-contract coverage in the recorded tests; it is not part of the validated default installation.
+
+## Accounts and access
+
+Registration requires a valid email, a nonempty full name of at most 100 characters, and a password of at least eight characters and at most 72 UTF-8 bytes. Email is normalized before storage. Passwords are hashed with bcrypt. Login returns a signed JWT and user information; protected APIs require a bearer token.
+
+Document, original-file, conversation and activity requests are scoped to the authenticated owner. Unowned and missing documents return `404`. A role value exists in the user record, but the application does not implement a comprehensive administration or role-management interface.
+
+The frontend keeps the token in browser local storage and restores a valid session with `/auth/me`. Invalid protected requests can clear the client session and redirect to login. Logout removes the client token; its endpoint acknowledges logout but does not revoke an already issued JWT on the server. Password recovery, MFA and multi-device revocation are unfinished.
+
+The default processing pipeline has no configured remote OCR or inference provider. Uploaded documents are still stored on the backend host and may contain sensitive information. Access checks do not imply encryption at rest, malware scanning, a compliance certification or a completed production security review. A public installation needs HTTPS, private secrets, operational controls and additional security work.
+
+## Data storage and maintenance
+
+### Stored entities
+
+| Entity | Contents |
+| --- | --- |
+| `users` | ID, normalized email, password hash, name, role and timestamps |
+| `documents` | Owner, original filename/MIME/size, storage key, status/type, checksum, page count, summary, failure reason, fields, items and page text |
+| `qa_messages` | Document and owner IDs, user/assistant text, timestamps and citations |
+| `activity_events` | Owner, related document, actor, event, status, details and timestamps |
+
+Fields, items, pages and citations are serialized as JSON in SQLite. The database uses WAL, foreign-key enforcement and a busy timeout. Startup creates tables and adds the page-content column to older document schemas. This is a lightweight startup migration, not a general database migration framework.
+
+### Default locations
+
+| Data | Path relative to `backend/` |
+| --- | --- |
+| Database | `data/development/prashn.db` |
+| Original files | `storage/uploads/`, under generated storage keys |
+| Complete extracted text | `storage/processed/[document-id].txt` |
+| Isolated evaluation/test artifacts | `.test-output/` |
+
+`DB_FILE`, `UPLOAD_DIR` and `PROCESSED_DIR` can override the locations. Relative paths resolve from `backend/`, not the shell's current directory. Temporary multipart files use the operating system's temporary directory before successful storage. Changing paths does not migrate old records or files automatically.
+
+### Reprocessing, deletion and backup
+
+Reprocessing uses the stored original and updates extraction results while retaining the conversation. Earlier answers remain historical messages; new questions use the current document record. There is no extraction-version history or automatic replay of past answers.
+
+Deleting a document removes its original, metadata, extracted text and associated conversation. The deletion event remains in account activity. There is no document trash or restore workflow. Clearing a conversation removes its persisted messages but keeps the document.
+
+Back up the database and original/processed storage together. Stop the backend for a consistent file-copy backup, or use a SQLite-aware database backup procedure and coordinate file storage. Do not assume copying only an active WAL database file is a complete backup. Verify restoration in a separate directory before replacing working data. Store backups and uploads outside version control.
+
+## Configuration
+
+Backend configuration loads `backend/.env`. Shell environment variables can also supply values. Frontend settings have different scope: `VITE_API_BASE_URL` is incorporated at build time, while `PRASHN_API_TARGET` configures the Vite development/preview proxy.
+
+| Variable | Default / behavior |
+| --- | --- |
+| `PORT` | `5000` |
+| `NODE_ENV` | `development`; production refuses startup without an explicit JWT secret |
+| `JWT_SECRET` | Set a private random signing secret; never use a shared example value |
 | `JWT_EXPIRES_IN` | `7d` |
-| `CORS_ORIGIN` | `http://localhost:5173`; adjust for separately hosted frontend |
-| `DB_FILE` | `data/development/prashn.db` relative to backend |
-| `DATABASE_URL` | Legacy database path alias when `DB_FILE` is absent |
-| `UPLOAD_DIR` | `storage/uploads` relative to backend |
-| `PROCESSED_DIR` | `storage/processed` relative to backend |
-| `PROCESSING_CONCURRENCY` | `2` |
+| `CORS_ORIGIN` | `http://localhost:5173`; use the actual frontend origin |
+| `DB_FILE` | `data/development/prashn.db` |
+| `DATABASE_URL` | Legacy path alias used when `DB_FILE` is absent; not a managed SQL connection URL |
+| `UPLOAD_DIR` | `storage/uploads` |
+| `PROCESSED_DIR` | `storage/processed` |
+| `PROCESSING_CONCURRENCY` | `2`; one backend process |
 | `MAX_DOCUMENT_PAGES` | `100` |
-| `OCR_LANGUAGE` | `eng`; additional language data must be supplied |
-| `OCR_LANG_PATH` | Optional local OCR language data directory |
-| `OCR_MODE` | `auto`; `always` forces OCR on PDF pages |
-| `OLLAMA_MODEL` | Empty for selected extractive mode; optional provider remains dormant |
-| `STORAGE_MODE` | `local`; unsupported storage providers are rejected |
-| `VITE_API_BASE_URL` | Frontend build-time API base; otherwise `/api` |
-| `PRASHN_API_TARGET` | Vite proxy target; otherwise `http://localhost:5000` |
+| `OCR_LANGUAGE` | `eng` |
+| `OCR_LANG_PATH` | Optional local trained-data directory |
+| `OCR_MODE` | `auto`; `always` forces PDF OCR |
+| `OLLAMA_MODEL` | Empty selects the default extractive answerer |
+| `OLLAMA_URL` | `http://127.0.0.1:11434`; used only by the optional provider |
+| `STORAGE_MODE` | `local`; other values are rejected |
+| `DATABASE_MODE`, `PROCESSING_MODE`, `CLASSIFICATION_MODE` | Default to `local`; names alone do not implement alternate backends |
+| `VITE_API_BASE_URL` | Frontend API base, otherwise `/api` |
+| `PRASHN_API_TARGET` | Vite proxy target, otherwise `http://localhost:5000` |
 
-Other mode names in configuration are not evidence that cloud implementations exist. Setting a variable to `aws` does not deploy or implement an AWS adapter.
+Keep secrets in server-side configuration. Any `VITE_` value embedded in a frontend build can be visible to browser users and must not contain a secret. Changing a backend environment setting requires restarting the process; changing a frontend build-time setting requires rebuilding.
 
-## 11. API reference
+## API reference
 
-Prefix all paths with `/api`. Protected endpoints require `Authorization: Bearer <token>`; original-file access also requires that header. URL query tokens are not accepted.
+All paths below have the `/api` prefix. Protected requests require `Authorization: Bearer <token>`. Query-string tokens are not accepted, including for original downloads. Requests and responses use JSON unless an upload is multipart or a file response returns original bytes.
 
-| Method | Path | Authentication | Purpose |
+### Accounts and health
+
+| Method | Path | Auth | Request / successful response |
 | --- | --- | --- | --- |
-| GET | `/health` | Public | Process health and selected Q&A mode |
-| POST | `/auth/register` | Public | JSON `{email, password, fullName}`; returns registration acknowledgement |
-| POST | `/auth/login` | Public | JSON `{email, password}`; returns `{token, user}` |
-| GET | `/auth/me` | Required | Current user |
-| POST | `/auth/logout` | Public | Acknowledgement; client drops token, no server-side revocation |
-| GET | `/documents` | Required | Owned documents in `{documents}`; UI handles filtering/pagination |
-| GET | `/documents/metrics` | Required | Actual user metrics in `{metrics}` |
-| POST | `/documents/upload` | Required | Multipart `file`; returns `{document}` |
-| POST | `/documents/upload-multiple` | Required | Multipart `files`; batch upload |
-| GET | `/documents/:id` | Required | Owned document in `{document}` |
-| GET | `/documents/:id/file` | Required | Original bytes, inline preview response |
-| POST | `/documents/:id/retry` | Required | Queue owned document for reprocessing |
-| DELETE | `/documents/:id` | Required | Delete document and related stored content |
-| GET | `/documents/:id/questions` | Required | History in `{conversation}` |
-| POST | `/documents/:id/questions` | Required | JSON `{question}`; assistant response in `{message}` |
-| DELETE | `/documents/:id/questions` | Required | Clear persisted conversation |
-| GET | `/activity` | Required | Owned activity events |
+| GET | `/health` | No | Process health, environment, processing/Q&A mode, workspace and extraction marker |
+| POST | `/auth/register` | No | `{email, password, fullName}`; `201` acknowledgement |
+| POST | `/auth/login` | No | `{email, password}`; `200 {token, user}` |
+| GET | `/auth/me` | Yes | `200 {user}` |
+| POST | `/auth/logout` | No | `200` acknowledgement; client removes its token |
 
-Questions must be nonempty strings of at most 4,000 characters. Registration requires a valid email, nonempty full name of at most 100 characters, and a password of at least eight characters and at most 72 UTF-8 bytes.
+### Documents, conversations and activity
 
-Common response codes are `400` for invalid input, `401` for invalid authentication, `404` for missing or unowned documents, `409` for an unready document or missing legacy page content, `413` for excessive file size, and `415` for unsupported upload type. Errors normally use `{error: "message"}`. Health returning `ok` is not a complete storage/database readiness assessment.
+| Method | Path | Request / successful response |
+| --- | --- | --- |
+| GET | `/documents` | `200 {documents}` for the owner; current API returns the owned list without cursor pagination |
+| GET | `/documents/metrics` | `200 {metrics}`: counts, original-byte totals, concurrency and configured limits/modes |
+| POST | `/documents/upload` | Multipart `file`; `201 {document}` after acceptance/queueing |
+| POST | `/documents/upload-multiple` | Multipart `files`, up to 20; `201 {documents}` |
+| GET | `/documents/:id` | `200 {document}` |
+| GET | `/documents/:id/file` | `200` original bytes with the original MIME type and private/no-store caching headers |
+| POST | `/documents/:id/retry` | `200 {success, message}` acknowledgement; use GET to inspect the updated status |
+| DELETE | `/documents/:id` | `200 {success, message}` after deletion |
+| GET | `/documents/:id/questions` | `200 {conversation}` |
+| POST | `/documents/:id/questions` | `{question}`; `201 {message}` containing the assistant answer and citations |
+| DELETE | `/documents/:id/questions` | `200 {success}` after clearing history |
+| GET | `/activity` | `200 {events}` for the authenticated owner |
 
-## 12. Security and operational boundaries
+All endpoints in the second table require authentication. A successful upload returns a queued record; poll the document endpoint until `Completed` or `Failed`. Original-file access requires the authorization header, so a bare browser link is not sufficient. The frontend fetches authenticated bytes and creates a temporary blob URL for its preview.
 
-Passwords are hashed, JWTs authorize protected routes, and owner checks protect document, chat and activity lookups. The frontend fetches original bytes with authentication and creates a temporary blob preview. Chat text is rendered through React rather than inserted as HTML.
+An assistant message contains `id`, `documentId`, `userId`, `sender`, `text`, `timestamp`, `createdAt` and `citations`. Each citation contains `id`, `source`, `page`, `section`, `snippet` and `confidence`. A document contains the persisted metadata plus optional `extractedFields`, `lineItems` and `pages`. Each page has `page`, `text`, `extractionMethod` and optional `confidence`.
 
-The current local app is not a completed production security implementation. JWTs are held in browser local storage, logout does not revoke issued tokens, and account recovery, rate limiting, malware scanning and a comprehensive production review remain future work. Keep `.env`, private uploads, databases and generated test artifacts out of commits. Preserve interface boundaries and full extracted content when extending the app.
+Example question request, using placeholders for an actual document and token:
 
-## 13. Validation and known issues
+~~~http
+POST /api/documents/DOC-EXAMPLE/questions HTTP/1.1
+Authorization: Bearer <token>
+Content-Type: application/json
 
-The latest completed run passed **24 backend regression tests**. The synthetic HTTP benchmark also passed 72 expected-field checks and 73 Q&A checks, including all 61 positive-answer citation checks and 12 missing-evidence refusals. See [the synthetic evaluation and browser report](synthetic-evaluation-report.md) for the before/after comparison and grading limits. Frontend production build and lint also passed; lint reports React advisory warnings. Coverage includes digital/mixed/scanned PDFs, PNG/JPEG OCR, rotated scans, currency preservation, source citations, field disambiguation, generic columns, multiline addresses, classification boundaries, authentication isolation, upload limits, retry, deletion and recovery. Additional cases cover varying page counts, repeated invoice/receipt/form/generic fields and persisted multi-invoice answers before and after reprocessing. One optional-provider contract test uses mocked responses; it installs or calls no model.
+{"question":"What is the total on page 2?"}
+~~~
 
-Run from the backend:
+### Error handling
 
-```powershell
+| Status | Common cause |
+| --- | --- |
+| `400` | Missing file, invalid account/question input or multipart limits |
+| `401` | Missing, invalid or expired authentication; invalid login credentials |
+| `404` | Missing document or owner mismatch |
+| `409` | Duplicate registration email, active retry request, unfinished document or missing legacy page content |
+| `413` | File exceeds the upload size limit |
+| `415` | Unsupported upload MIME type |
+| `503` | Configured optional Q&A provider failed |
+| `500` | Unexpected server-side failure |
+
+Most errors include `{error: "message"}`; authentication errors also include an explanatory `message`. Extraction failures after upload are reported in the document's `Failed` status and `failureReason` rather than turning an accepted upload into a successful extraction. The health endpoint reports process status; it does not test every storage/database operation or operational dependency.
+
+## Testing and validation
+
+Backend, from `backend/`:
+
+~~~bash
 npm test
-```
+~~~
 
-Run from the repository root:
+Frontend, from the repository root:
 
-```powershell
+~~~bash
 npm run build
 npm run lint
-```
+~~~
 
-Fixtures and test databases are generated under `backend/.test-output/`. A separate HTTP smoke test exercised the frontend proxy and backend workflow. Earlier browser visual and interactive QA was unavailable. A subsequent Brave pass verified single/batch upload results, failed-processing retry, PDF preview, persisted chat scrolling, a 390 x 844 emulated phone layout and session expiry. Passing these checks does not prove perfect extraction for arbitrary documents or correctness in other browsers.
+Optional evaluation, from `backend/`:
 
-A reported invoice defect involved PDF values appearing before labels in drawing order. Reading-order reconstruction and ordinary cost/date matching were corrected. The previously uploaded invoice was reprocessed in an earlier pass. Later column-field enhancements passed generated regression cases but were not reapplied to that stored invoice before development was paused. The static backend session may still run the earlier build until restarted; existing records require Reprocess to use newer extraction behavior. Original files and chat history were preserved.
+~~~bash
+npm run evaluate
+~~~
 
-A subsequent screenshot revealed a runtime mismatch: Vite served `Prashn-latest`, while port 5000 ran the older sibling `Prashn` backend. That verified older backend was stopped and the latest compiled backend started. A SQLite backup was retained under the ignored test-output directory. Local environment paths now retain the original database and file storage, and the screenshot's document was reprocessed successfully. Its invoice number, date and total were checked against the corrected extraction; original bytes and conversation history remained intact. Runtime health now reports the workspace name and extraction version to help identify a stale backend.
+The normal backend suite builds TypeScript and runs `workflow.test.cjs` plus `question-language.test.cjs`. It generates fictional PDFs/images and isolated database/storage artifacts under `backend/.test-output/`. It checks real extraction/OCR, API workflows, authentication/ownership, original bytes, citations, limits, failures, retry/deletion/recovery, field disambiguation, multiline/column layouts, repeated pages and bounded follow-up safety. An optional-provider contract test uses mocked responses; it does not install or invoke a model.
 
-See [the detailed validation report](local-mvp-test-report.md) and [the proposed AWS architecture](aws-architecture.md).
+Recorded verification on 9 October 2026:
 
-## 14. Delivery roadmap
+| Check | Recorded result |
+| --- | --- |
+| Backend regression cases | 24/24 |
+| Synthetic benchmark documents | 9/9 completed with expected categories, page counts and extraction methods |
+| Expected field/value/page/provenance checks | 72/72 |
+| Expected line items | 2/2 |
+| Questions | 73/73 |
+| Positive-answer citation checks | 61/61 |
+| Missing-evidence refusals | 12/12 |
+| Frontend builds | Passed |
+| Lint | Passed exit status; 11 advisory warnings, zero errors |
 
-1. Restart the latest compiled backend and reprocess affected existing documents; extend the completed Brave browser pass to other browsers, physical devices and interruption scenarios.
-2. Expand a representative, anonymized document evaluation set and record extraction accuracy and answer correctness by layout.
-3. Implement the AWS storage, repository, authentication and durable queue adapters.
-4. Deploy reproducible infrastructure, monitoring, retry/DLQ handling and resource limits.
-5. Demonstrate concurrent uploads, duplicate-event handling, recovery and tenant isolation in AWS.
+Brave browser verification covered single-upload navigation, mixed-success batch results, corrupt-file processing retry, original PDF preview, typed Q&A, persistent long-history scrolling, mobile navigation/upload at 390 x 844 CSS pixels, and automatic session expiry. See the [evaluation report](synthetic-evaluation-report.md) for observations and the [benchmark instructions](../backend/tests/evaluation/README.md) for grading.
 
-Custom model development remains deferred. The cloud computing project can demonstrate storage, serverless processing, queueing, fault tolerance and monitoring while keeping the application answerer extractive.
+The benchmark uses the same fictional fixtures before and after targeted fixes. It is a development/regression benchmark, not an independent post-fix holdout or population accuracy estimate. The field metric checks expected fields and does not measure precision of every extra emitted field. The browser pass covers one browser and an emulated phone viewport, not all physical devices or interruption scenarios.
+
+## Troubleshooting
+
+| Symptom | Check and action |
+| --- | --- |
+| Frontend loads but API requests fail | Start the backend; check `/api/health` and the Vite proxy target. Compare the configured port and printed frontend URL. |
+| Results differ from newly built code | Stop/restart the intended compiled backend, confirm its workspace, then reprocess the document. A frontend rebuild does not reload a static backend. |
+| Old documents disappeared after changing settings | Verify the database and storage paths. Different paths create/use different data locations; they do not migrate existing uploads. |
+| PDF values are missing or associated incorrectly | Inspect the original and full text. Reprocess with the current backend; try forced OCR if the selectable text layer is incomplete. |
+| Image or PDF returns Failed | Read the actual failure reason. Supply an unlocked/readable file or a clearer scan. Retry alone cannot repair corrupt source bytes. |
+| OCR language data fails to load | Use bundled English data or provide the correct local trained-data directory for the configured language. |
+| Q&A returns `409` | Wait for completion; reprocess legacy records that lack page content. |
+| Q&A refuses a present fact | Inspect whether the fact was extracted; use a specific field/page question. Report the layout/question with an anonymized reproducible example. |
+| Preview or direct download returns `401` | Authenticate through the app or include a bearer header in an API client; do not put the token in the URL. |
+| Sign-in suddenly ends | An invalid/expired protected request can clear the session. Sign in again; verify the intended server's secret and token lifetime. |
+| Optional provider returns `503` | Check the separately configured service/model, or leave `OLLAMA_MODEL=` empty to use the validated default mode. |
+| A native module cannot load | Install dependencies for the target OS/architecture using the lockfile; do not reuse another machine's native binaries. |
+| Port is already in use | Use an available port and update the matching proxy/origin settings. Verify which checkout each process belongs to. |
+
+For a useful bug report, include an anonymized source file or reproducible layout, the question, expected and actual values, page number, failure reason and runtime configuration without secrets. Do not submit private uploads, database files or tokens to the repository.
+
+## Limitations and future work
+
+Current limits include heuristic extraction/classification, incomplete complex-table and handwriting support, bounded phrasing and follow-ups, single-document Q&A, a single-process queue, client-side list filtering/pagination, unfinished account/settings features and incomplete production security controls.
+
+Useful improvements include representative anonymized real-document evaluation, additional browser/device and interruption checks, better unsupported-layout reporting, pagination, account recovery/session controls, operational readiness, rate limiting and tested backup restoration. Dedicated ID parsing or verification would require separately specified features and evaluation; accepting an ID file does not implement them.
+
+## Optional AWS deployment
+
+AWS can be considered when a hosted installation or independently scalable processing is needed. It is optional and does not define the application's purpose. The repository has no implemented AWS adapters or infrastructure deployment workflow. See [Optional AWS deployment](aws-architecture.md) for hosting the existing application on EC2, the proposed managed-service architecture, migration prerequisites and acceptance checks. Local startup does not provision resources or upload existing documents to AWS.
