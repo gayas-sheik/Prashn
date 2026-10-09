@@ -1,4 +1,5 @@
 import fs from 'fs';
+import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { PDFParse } from 'pdf-parse';
 import { getDocument, PDFDocumentLoadingTask } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { getLayoutText } from './pdf.layout';
@@ -23,8 +24,26 @@ export class LocalExtractor implements DocumentExtractor {
         });
         await worker.setParameters({ tessedit_pageseg_mode: PSM.AUTO, preserve_interword_spaces: '1' });
       }
-      const { data } = await worker.recognize(image);
-      return { text: clean(data.text), confidence: data.confidence };
+      let best = (await worker.recognize(image)).data;
+      const quality = (data: typeof best) => data.confidence * Math.min(1, clean(data.text).replace(/[^\p{L}\p{N}]/gu, '').length / 80);
+      // Sideways scans can produce nonempty gibberish. Retry quarter turns only
+      // when initial OCR is weak, retaining the most readable candidate.
+      if (best.confidence < 50) {
+        const source = await loadImage(typeof image === 'string' ? await fs.promises.readFile(image) : image);
+        for (const quarterTurns of [1, 2, 3]) {
+          // Expand the canvas so turning a portrait page never crops its labels.
+          const canvas = createCanvas(quarterTurns % 2 ? source.height : source.width, quarterTurns % 2 ? source.width : source.height);
+          const context = canvas.getContext('2d');
+          context.fillStyle = 'white'; context.fillRect(0, 0, canvas.width, canvas.height);
+          context.translate(canvas.width / 2, canvas.height / 2);
+          context.rotate(quarterTurns * Math.PI / 2);
+          context.drawImage(source, -source.width / 2, -source.height / 2);
+          const candidate = (await worker.recognize(canvas.toBuffer('image/png'))).data;
+          if (quality(candidate) > quality(best)) best = candidate;
+          if (best.confidence >= 85 && quality(best) >= 85) break;
+        }
+      }
+      return { text: clean(best.text), confidence: best.confidence };
     };
     try {
       const pages: DocumentPage[] = [];

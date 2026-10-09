@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { Document, ExtractedField, QACitation } from '../types';
 import { config } from '../config/env';
+import { canonicalQuestion } from './question.language';
 
 export const NOT_FOUND = "I couldn't find that information in this document.";
 export interface DocumentAnswer { text: string; citations: QACitation[]; }
@@ -9,7 +10,7 @@ const absent = (): DocumentAnswer => ({ text: NOT_FOUND, citations: [] });
 const normalized = (text: string) => text.toLowerCase().replace(/\bwhatt\b/g, 'what').replace(/['’]s\b/g, '').replace(/[^\p{L}\p{N}\s]/gu, ' ');
 const ignored = new Set('what which who whom whose is are was were be been being the a an this that these those document invoice receipt form please tell me about can could would you your it its of to for in on at from and or does do did how much many give show find get listed purchased bought name amount unit provided mentioned shown given stated'.split(' '));
 const synonyms: Record<string, string> = { seller: 'vendor', supplier: 'vendor', issuer: 'vendor', client: 'customer', buyer: 'customer', cost: 'price', charge: 'price', rate: 'price', qty: 'quantity', product: 'item', service: 'item', gst: 'tax', vat: 'tax', location: 'address', telephone: 'phone', mobile: 'phone', coverage: 'cover', expires: 'expiry', expiration: 'expiry' };
-const words = (text: string) => normalized(text).replace(/\bbefore tax\b/g, 'subtotal')
+const words = (text: string) => normalized(text).replace(/\bbefore tax(?:es)?\b/g, 'subtotal')
   .replace(/\bbill(?:ed)? to\b/g, 'customer')
   .replace(/\b(invoice|receipt) (?:no|id|reference|ref)\b/g, '$1 number')
   .replace(/\b(?:phone|telephone|mobile) number\b/g, 'phone')
@@ -26,7 +27,8 @@ const sourceForField = (field: ExtractedField, doc: Document) => {
 
 export class ExtractiveDocumentAnswerer implements DocumentAnswerer {
   async answer(question: string, doc: Document): Promise<DocumentAnswer> {
-    const query = normalized(question);
+    const query = normalized(canonicalQuestion(question));
+    question = query;
     const pageSelection = query.match(/\b(?:on |from |in )?page\s+(\d+)\b/);
     if (pageSelection) {
       const number = Number(pageSelection[1]);
@@ -60,7 +62,7 @@ export class ExtractiveDocumentAnswerer implements DocumentAnswerer {
     if (/\bhow many pages\b|\bpage count\b|\bnumber of pages\b/.test(query)) return { text: `This document has ${doc.pagesCount} ${doc.pagesCount === 1 ? 'page' : 'pages'}.`, citations: pages.length ? [cite(doc, pages[pages.length - 1].page, pages[pages.length - 1].text.slice(0, 200), 'Page count')] : [] };
 
     const items = doc.lineItems || [];
-    const itemRequest = /\b(?:item|items|product|products|quantity|quantities)\b|\bhow many\b|\bunit price\b/.test(query) || /\b(?:price|cost)\b/.test(query) && items.some(item => words(item.description).some(word => keywords.includes(word)));
+    const itemRequest = /\b(?:item|items|product|products|quantity|quantities)\b|\bhow many\b|\bunit price\b/.test(query) || /\b(?:price|cost|total|amount)\b/.test(query) && items.some(item => words(item.description).some(word => keywords.includes(word)));
     if (itemRequest && items.length) {
       const ordinal = query.match(/\b(first|second|third|fourth|fifth|\d+(?:st|nd|rd|th))\b/)?.[0];
       const ordinals: Record<string, number> = { first: 0, second: 1, third: 2, fourth: 3, fifth: 4 };
@@ -69,7 +71,7 @@ export class ExtractiveDocumentAnswerer implements DocumentAnswerer {
       const selected = ordinal ? (items[index] ? [items[index]] : []) : subjects.length ? items.filter(item => subjects.every(word => words(item.description).includes(word))) : items;
       if (!selected.length) return absent();
       return {
-        text: selected.map(item => /\bhow many\b|\bquantit/.test(query) ? `${item.quantity} ${item.description}.` : /\b(?:price|cost|rate)\b/.test(query) ? `The unit price of ${item.description} is **${item.unitPrice}**.` : /\b(?:total|amount)\b/.test(query) ? `The amount for ${item.description} is **${item.amount}**.` : `${item.description}: quantity ${item.quantity}, unit price ${item.unitPrice}, amount ${item.amount}.`).join('\n'),
+        text: selected.map(item => /\bhow many\b|\bquantit/.test(query) ? `${item.quantity} ${item.description}.` : /\b(?:total|amount)\b/.test(query) && !/\bunit\b/.test(query) ? `The amount for ${item.description} is **${item.amount}**.` : /\b(?:price|cost|rate)\b/.test(query) ? `The unit price of ${item.description} is **${item.unitPrice}**.` : `${item.description}: quantity ${item.quantity}, unit price ${item.unitPrice}, amount ${item.amount}.`).join('\n'),
         citations: selected.filter(item => item.page && item.snippet && pages.some(page => page.page === item.page && page.text.includes(item.snippet!))).map(item => cite(doc, item.page!, item.snippet!, 'Line item', 85)),
       };
     }
@@ -87,11 +89,11 @@ export class ExtractiveDocumentAnswerer implements DocumentAnswerer {
     if (specific) {
       const aliases: Record<string, string> = { 'before tax': 'subtotal', gst: 'tax', vat: 'tax', 'sub total': 'subtotal', birth: 'date of birth', dob: 'date of birth' };
       const label = /^(?:tax (?:rate|percent|percentage)|(?:gst|vat) rate)$/.test(specific) ? 'tax rate' : aliases[specific] || specific;
-      const subject = /\bcustomer\b|\bbuyer\b|\bclient\b/.test(query) ? 'customer' : /\bvendor\b|\bseller\b|\bsupplier\b/.test(query) ? 'vendor' : '';
+      const subject = /\bapplicant\b/.test(query) ? 'applicant' : /\bcustomer\b|\bbuyer\b|\bclient\b/.test(query) ? 'customer' : /\bvendor\b|\bseller\b|\bsupplier\b/.test(query) ? 'vendor' : '';
       let matching = fields.filter(field => normalized(field.label) === `${subject} ${label}`.trim());
-      if (!matching.length && (!subject || subject === 'vendor')) matching = fields.filter(field => normalized(field.label) === label);
+      if (!matching.length && (!subject || subject === 'vendor' || subject === 'applicant')) matching = fields.filter(field => normalized(field.label) === label);
       if (matching.length) {
-        const extras = keywords.filter(word => ![...words(label), subject, 'payment', 'before', ...(label === 'email' ? ['address'] : [])].includes(word));
+        const extras = keywords.filter(word => ![...words(label), subject, 'payment', 'before', ...(label === 'email' ? words('address') : [])].includes(word));
         const qualified = matching.filter(field => extras.every(word => words(`${field.label} ${field.value}`).includes(word)));
         if (qualified.length) return fieldsAnswer(qualified);
       }
@@ -124,13 +126,15 @@ export class ExtractiveDocumentAnswerer implements DocumentAnswerer {
       return excerpts.length ? { text: `Document excerpts:\n\n${excerpts.map(page => page.text.slice(0, 1000)).join('\n\n')}`, citations: excerpts.map(page => cite(doc, page.page, page.text.slice(0, 1000), 'Document excerpt')) } : absent();
     }
     // Retrieve sentences/windows from the entire document, preserving page provenance.
-    const passages = pages.flatMap(page => page.text.split(/\n\s*\n|(?<=[.!?])\s+(?=[A-Z])/).flatMap(paragraph => {
+    const passages = pages.flatMap(page => page.text.split(/\n+|(?<=[.!?])\s+(?=[A-Z])/).flatMap(paragraph => {
       if (paragraph.length <= 1400) return [{ page: page.page, text: paragraph.trim() }];
       const chunks: { page: number; text: string }[] = [];
       for (let offset = 0; offset < paragraph.length; offset += 1000) chunks.push({ page: page.page, text: paragraph.slice(offset, offset + 1400).trim() });
       return chunks;
     }));
-    const matched = passages.filter(passage => keywords.length && keywords.every(word => words(passage.text).includes(word)))
+    const duration = query.match(/^how long is (?:the )?([\p{L}\s]+)$/u)?.[1]?.trim();
+    const durationWords = duration ? words(duration) : [];
+    const matched = passages.filter(passage => duration ? durationWords.length && durationWords.every(word => words(passage.text).includes(word)) && /\b(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirty)\s+(?:business\s+)?(?:days?|weeks?|months?|years?|hours?)\b/i.test(passage.text) : keywords.length && keywords.every(word => words(passage.text).includes(word)))
       .sort((left, right) => left.text.length - right.text.length).slice(0, 3);
     return matched.length ? { text: `Relevant document passages:\n\n${matched.map(passage => passage.text).join('\n\n')}`, citations: matched.map(passage => cite(doc, passage.page, passage.text, 'Document passage', 75)) } : absent();
   }

@@ -79,3 +79,12 @@ The upload screen now polls accepted documents without overlapping polls, cancel
 Process launch paths confirmed that the frontend on 5173 used `Prashn-latest`, while the backend on 5000 used the older `Prashn` checkout. The older backend had no pending jobs when switched. Its database was backed up, and the latest backend was configured through ignored local environment paths to retain the existing database and storage. The document shown in the screenshot was then reprocessed through the latest API. Its invoice number, date and total passed assertions, original-file checksum remained identical, and conversation row count was unchanged. Earlier incorrect replies remain historical messages; new questions use the corrected record.
 
 Health through the frontend proxy now reports `workspace: Prashn-latest` and `extractionVersion: layout-fields-v2`. The default Q&A PDF preview requests fit-to-width rather than forcing 100% zoom in a narrow panel. The `view=FitH` parameter is supported by the [Chromium PDF parameter parser](https://raw.githubusercontent.com/chromium/chromium/main/chrome/browser/resources/pdf/open_pdf_params_parser.ts); interactive rendering still needs browser verification.
+
+
+## Synthetic evaluation and browser verification
+
+A subsequent 9 October 2026 pass used nine new fictional PDFs, 72 expected fields and 73 sequential questions. Targeted repairs improved expected-field correctness/provenance from 64/72 to 72/72 and fully correct question/citation checks from 41/73 to 73/73. All 12 missing-evidence questions still refuse. The six added regression cases bring the backend suite to 24 cases.
+
+Brave browser testing now covers single-upload automatic navigation, mixed-success batch results, retry of a corrupt PDF, original PDF preview, typed Q&A, persisted long-history scrolling, mobile navigation/upload layouts at 390 x 844 CSS pixels, and automatic logout after token expiry. The mobile header and staging actions were repaired; fabricated navigation badges and cloud/certification claims were removed. Frontend build passes and lint has 11 advisory warnings with no errors.
+
+See [the full synthetic evaluation and browser report](synthetic-evaluation-report.md) for grading definitions, observations, reproduction instructions and limits. This is a synthetic development benchmark, not an independent holdout or a claim of perfect real-document accuracy. Original user records were not reprocessed in this pass.

@@ -112,7 +112,7 @@ Examples of supported requests include:
 
 An invoice total does not establish payment status. A tax rate is distinct from a tax amount; a GST identifier is distinct from tax. When multiple recognized values match a question, the answer can list the values and their pages rather than choosing one silently.
 
-If evidence is missing, the response is: **“I couldn't find that information in this document.”** Conversation messages are persisted, but storage of history does not imply that the extractive engine understands conversational references such as “and the other one?”. Documents with legacy records lacking page text must be reprocessed before Q&A.
+If evidence is missing, the response is: **“I couldn't find that information in this document.”** Conversation messages are persisted. Explicit page follow-ups such as “And on page 3?” and unambiguous party references such as “What is their phone number?” use the preceding successfully cited turn. Ambiguous references such as “and the other one?” still refuse. Conversation context selects a source page or party; answers remain grounded in the document. Documents with legacy records lacking page text must be reprocessed before Q&A.
 
 ## 8. Data model and persistence
 
@@ -230,7 +230,7 @@ The current local app is not a completed production security implementation. JWT
 
 ## 13. Validation and known issues
 
-The latest completed run passed **18 backend regression tests**. Frontend production build and lint also passed; lint reports React advisory warnings. Coverage includes digital/mixed/scanned PDFs, PNG/JPEG OCR, rotated scans, currency preservation, source citations, field disambiguation, generic columns, multiline addresses, classification boundaries, authentication isolation, upload limits, retry, deletion and recovery. Additional cases cover varying page counts, repeated invoice/receipt/form/generic fields and persisted multi-invoice answers before and after reprocessing. One optional-provider contract test uses mocked responses; it installs or calls no model.
+The latest completed run passed **24 backend regression tests**. The synthetic HTTP benchmark also passed 72 expected-field checks and 73 Q&A checks, including all 61 positive-answer citation checks and 12 missing-evidence refusals. See [the synthetic evaluation and browser report](synthetic-evaluation-report.md) for the before/after comparison and grading limits. Frontend production build and lint also passed; lint reports React advisory warnings. Coverage includes digital/mixed/scanned PDFs, PNG/JPEG OCR, rotated scans, currency preservation, source citations, field disambiguation, generic columns, multiline addresses, classification boundaries, authentication isolation, upload limits, retry, deletion and recovery. Additional cases cover varying page counts, repeated invoice/receipt/form/generic fields and persisted multi-invoice answers before and after reprocessing. One optional-provider contract test uses mocked responses; it installs or calls no model.
 
 Run from the backend:
 
@@ -245,7 +245,7 @@ npm run build
 npm run lint
 ```
 
-Fixtures and test databases are generated under `backend/.test-output/`. A separate HTTP smoke test exercised the frontend proxy and backend workflow. Browser visual and interactive QA was unavailable because no browser surface was connected. Passing these checks does not prove perfect extraction for arbitrary documents.
+Fixtures and test databases are generated under `backend/.test-output/`. A separate HTTP smoke test exercised the frontend proxy and backend workflow. Earlier browser visual and interactive QA was unavailable. A subsequent Brave pass verified single/batch upload results, failed-processing retry, PDF preview, persisted chat scrolling, a 390 x 844 emulated phone layout and session expiry. Passing these checks does not prove perfect extraction for arbitrary documents or correctness in other browsers.
 
 A reported invoice defect involved PDF values appearing before labels in drawing order. Reading-order reconstruction and ordinary cost/date matching were corrected. The previously uploaded invoice was reprocessed in an earlier pass. Later column-field enhancements passed generated regression cases but were not reapplied to that stored invoice before development was paused. The static backend session may still run the earlier build until restarted; existing records require Reprocess to use newer extraction behavior. Original files and chat history were preserved.
 
@@ -255,7 +255,7 @@ See [the detailed validation report](local-mvp-test-report.md) and [the proposed
 
 ## 14. Delivery roadmap
 
-1. Resume local verification: restart the latest compiled backend, reprocess affected documents, inspect outputs and perform browser QA when available.
+1. Restart the latest compiled backend and reprocess affected existing documents; extend the completed Brave browser pass to other browsers, physical devices and interruption scenarios.
 2. Expand a representative, anonymized document evaluation set and record extraction accuracy and answer correctness by layout.
 3. Implement the AWS storage, repository, authentication and durable queue adapters.
 4. Deploy reproducible infrastructure, monitoring, retry/DLQ handling and resource limits.

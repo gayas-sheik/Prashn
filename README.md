@@ -8,7 +8,8 @@ Prashn processes uploaded PDFs and images, preserves complete extracted content,
 
 - [Project documentation](docs/project-documentation.md): objectives, implemented features, architecture, extraction and Q&A behavior, data model, setup, configuration, API reference, limitations and roadmap.
 - [Proposed AWS architecture](docs/aws-architecture.md): service diagram, asynchronous Textract flow, migration work, scaling, retries, monitoring and cost considerations.
-- [Local validation report](docs/local-mvp-test-report.md): test coverage, results and verification limits.
+- [Local validation report](docs/local-mvp-test-report.md): earlier repair coverage and results.
+- [Synthetic evaluation and browser verification](docs/synthetic-evaluation-report.md): measured before/after results, browser checks, repairs and limits.
 - [Contributor instructions](AGENTS.md): development boundaries and project conventions.
 
 ## Quick start
@@ -53,7 +54,7 @@ npm run build
 npm run lint
 ```
 
-The latest completed run passed 18 backend cases and the frontend build. Lint exits successfully with React advisory warnings. Browser visual/interactive testing remains outstanding. Tests generate isolated artifacts under `backend/.test-output/`.
+The latest verification passed 24 backend cases, 72 expected-field checks, 73 Q&A checks and the frontend build. Lint exits successfully with 11 React advisory warnings. Brave browser verification covered single/batch upload, failed processing retry, PDF preview, chat scrolling, mobile layouts and session expiry. See the synthetic evaluation report for scope and limits. Tests generate isolated artifacts under `backend/.test-output/`.
 
 Repeated fields are retained across pages, including identical values. Broad date/amount questions return all recognized values with page citations. Page-specific questions such as “What is the date on page 3?” restrict the answer to that page. Restart an existing compiled backend and use Reprocess on previously uploaded documents to apply these extraction fixes.
 

@@ -25,9 +25,9 @@ export const MobileNav: React.FC<MobileNavProps> = ({ open, onClose }) => {
 
   const navItems = [
     { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
-    { label: 'Documents', path: '/documents', icon: FileText, count: '128' },
+    { label: 'Documents', path: '/documents', icon: FileText },
     { label: 'Upload Documents', path: '/upload', icon: UploadCloud },
-    { label: 'Processing Queue', path: '/processing', icon: Cpu, badge: '6 active' },
+    { label: 'Processing Queue', path: '/processing', icon: Cpu },
     { label: 'Activity & Audit Log', path: '/activity', icon: Clock },
     { label: 'Settings', path: '/settings', icon: Settings },
   ];
@@ -55,6 +55,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({ open, onClose }) => {
             </div>
             <button
               onClick={onClose}
+              aria-label="Close navigation"
               className="p-1 rounded-[4px] text-[#64748B] hover:bg-[#F1F5F9] dark:hover:bg-[#334155]"
             >
               <X className="w-5 h-5" />
@@ -80,16 +81,6 @@ export const MobileNav: React.FC<MobileNavProps> = ({ open, onClose }) => {
                 >
                   <Icon className="w-4 h-4" />
                   <span className="flex-1">{item.label}</span>
-                  {item.count && (
-                    <span className="text-[11px] font-mono px-2 py-0.5 rounded-[2px] bg-[#F1F5F9] dark:bg-[#334155] text-[#64748B]">
-                      {item.count}
-                    </span>
-                  )}
-                  {item.badge && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-[2px] bg-[#E0F2FE] text-[#0284C7] dark:bg-[#0C4A6E40] dark:text-[#38BDF8]">
-                      {item.badge}
-                    </span>
-                  )}
                 </NavLink>
               );
             })}
@@ -100,20 +91,20 @@ export const MobileNav: React.FC<MobileNavProps> = ({ open, onClose }) => {
         <div className="p-3 border-t border-[#E2E8F0] dark:border-[#334155]">
           <div className="flex items-center gap-2.5 p-2 rounded-[4px] bg-[#F8FAFC] dark:bg-[#162032] border border-[#E2E8F0] dark:border-[#2D3F5A] mb-3">
             <div className="w-8 h-8 rounded-full bg-[#1E40AF] text-white flex items-center justify-center text-[12px] font-bold">
-              AP
+              {user?.name.split(/\s+/).map(word => word[0]).join('').slice(0, 2) || 'U'}
             </div>
             <div className="truncate">
               <div className="text-[13px] font-medium text-[#0F172A] dark:text-[#F8FAFC]">
-                {user?.name || 'Alex Parker'}
+                {user?.name || 'Account'}
               </div>
               <div className="text-[11px] text-[#64748B] dark:text-[#94A3B8]">
-                {user?.email || 'alex.parker@enterprise.internal'}
+                {user?.email || ''}
               </div>
             </div>
           </div>
           <div className="flex items-center gap-1.5 text-[11px] text-[#059669]">
             <ShieldCheck className="w-4 h-4" />
-            <span>SOC2 Type II Encrypted Session</span>
+            <span>Account-scoped local documents</span>
           </div>
         </div>
       </div>

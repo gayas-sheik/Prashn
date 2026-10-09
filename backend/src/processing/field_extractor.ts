@@ -17,7 +17,10 @@ export class StructuredFieldExtractor {
       if (/^(?:Invoice|Receipt) Number$/.test(label)) return /^[\p{L}\p{N}_/#.-]+$/u.test(value);
       return true;
     };
-    const rows = (pages || [{ page: 1, text, extractionMethod: 'text' as const }]).flatMap(page => page.text.split('\n').map(line => ({ page: page.page, line: line.trim() })).filter(row => row.line));
+    const rows = (pages || [{ page: 1, text, extractionMethod: 'text' as const }]).flatMap(page => {
+      let block = 0;
+      return page.text.split('\n').map(line => { if (!line.trim()) block++; return { page: page.page, block, line: line.trim() }; }).filter(row => row.line);
+    });
     const add = (label: string, value: string, row: typeof rows[number], confidence = 0.9) => {
       if (value.trim() && !fields.some(field => field.page === row.page && field.label.toLowerCase() === label.toLowerCase() && field.value === value.trim())) fields.push({ label, value: value.trim(), page: row.page, snippet: row.line, confidence });
     };
@@ -31,13 +34,13 @@ export class StructuredFieldExtractor {
         const match = row.line.match(pattern);
         if (!match) continue;
         const next = rows[index + 1];
-        let value = match[1].trim() || (next?.page === row.page ? next.line : '');
+        let value = match[1].trim() || (next?.page === row.page && next.block === row.block ? next.line : '');
         if (!value || !validValue(label, value)) continue;
         let snippet = match[1].trim() ? row.line : `${row.line}\n${value}`;
         if (/address$/i.test(label) && !match[1].trim()) {
           for (let following = index + 2; following < rows.length; following++) {
             const continuation = rows[following];
-            if (continuation.page !== row.page || heading.test(continuation.line) || /\t|:/.test(continuation.line)) break;
+            if (continuation.page !== row.page || continuation.block !== row.block || heading.test(continuation.line) || /\t|:/.test(continuation.line)) break;
             value += '\n' + continuation.line; snippet += '\n' + continuation.line;
           }
         }
@@ -161,7 +164,7 @@ export class StructuredFieldExtractor {
         if (!AMOUNT.test(value)) {
           for (let following = index + 1; following < rows.length; following++) {
             const continuation = rows[following];
-            if (continuation.page !== row.page || heading.test(continuation.line) || /\t|:/.test(continuation.line) || AMOUNT.test(continuation.line) || !/[\p{L}]/u.test(continuation.line)) break;
+            if (continuation.page !== row.page || continuation.block !== row.block || heading.test(continuation.line) || /\t|:/.test(continuation.line) || AMOUNT.test(continuation.line) || !/[\p{L}]/u.test(continuation.line)) break;
             value += '\n' + continuation.line; snippet += '\n' + continuation.line;
           }
         }

@@ -274,7 +274,7 @@ export const UploadPage: React.FC = () => {
       {stagedFiles.length > 0 && (
         <Card
           title={
-            <div className="flex items-center justify-between w-full">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 w-full">
               <span className="text-[14px] font-semibold text-[#0F172A] dark:text-[#F8FAFC]">
                 Selected Documents ({stagedFiles.length} ready to process)
               </span>

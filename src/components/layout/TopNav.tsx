@@ -47,15 +47,16 @@ export const TopNav: React.FC<TopNavProps> = ({ onOpenMobileMenu }) => {
   return (
     <header className="sticky top-0 z-20 h-[56px] border-b border-[#E2E8F0] dark:border-[#334155] bg-white dark:bg-[#1E293B] px-4 flex items-center justify-between">
       {/* Left: Mobile Toggle & Breadcrumb */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 min-w-0">
         <button
           onClick={onOpenMobileMenu}
+          aria-label="Open navigation"
           className="lg:hidden p-1.5 rounded-[4px] text-[#64748B] hover:bg-[#F1F5F9] dark:hover:bg-[#334155]"
         >
           <Menu className="w-5 h-5" />
         </button>
 
-        <nav className="flex items-center gap-2 text-[13px]">
+        <nav className="flex items-center gap-2 text-[13px] min-w-0">
           <span className="text-[#64748B] dark:text-[#94A3B8]">Prashn</span>
           <span className="text-[#CBD5E1] dark:text-[#475569]">/</span>
           <span className="font-semibold text-[#0F172A] dark:text-[#F8FAFC] capitalize">
@@ -63,8 +64,8 @@ export const TopNav: React.FC<TopNavProps> = ({ onOpenMobileMenu }) => {
           </span>
           {pathParts.length > 1 && (
             <>
-              <span className="text-[#CBD5E1] dark:text-[#475569]">/</span>
-              <span className="font-mono text-[12px] text-[#1E40AF] dark:text-[#60A5FA]">
+              <span className="hidden md:inline text-[#CBD5E1] dark:text-[#475569]">/</span>
+              <span className="hidden md:inline truncate max-w-[240px] font-mono text-[12px] text-[#1E40AF] dark:text-[#60A5FA]">
                 {pathParts[1]}
               </span>
             </>
@@ -185,7 +186,7 @@ export const TopNav: React.FC<TopNavProps> = ({ onOpenMobileMenu }) => {
             className="flex items-center gap-1.5 p-1 rounded-[4px] hover:bg-[#F1F5F9] dark:hover:bg-[#334155] transition-colors"
           >
             <div className="w-7 h-7 rounded-full bg-[#1E40AF] text-white flex items-center justify-center text-[11px] font-semibold">
-              AP
+              {user?.name.split(/\s+/).map(word => word[0]).join('').slice(0, 2) || 'U'}
             </div>
             <ChevronDown className="w-3 h-3 text-[#64748B]" />
           </button>
@@ -194,7 +195,7 @@ export const TopNav: React.FC<TopNavProps> = ({ onOpenMobileMenu }) => {
             <div className="absolute right-0 mt-1.5 w-52 rounded-[4px] bg-white dark:bg-[#1E293B] border border-[#CBD5E1] dark:border-[#475569] shadow-layer2 py-1.5 text-[12px] z-50">
               <div className="px-3 py-1.5 border-b border-[#E2E8F0] dark:border-[#334155]">
                 <div className="font-semibold text-[#0F172A] dark:text-[#F8FAFC]">{user?.name || 'Account'}</div>
-                <div className="text-[11px] text-[#64748B] dark:text-[#94A3B8] truncate">{user?.email || 'alex.parker@enterprise.internal'}</div>
+                <div className="text-[11px] text-[#64748B] dark:text-[#94A3B8] truncate">{user?.email || ''}</div>
               </div>
               <button
                 onClick={() => { setUserMenuOpen(false); navigate('/settings'); }}

@@ -4,11 +4,12 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "npm run build && node --test tests/workflow.test.cjs",
+    "test": "npm run build && node --test tests/workflow.test.cjs tests/question-language.test.cjs",
     "dev": "nodemon --watch src --ext ts --exec \"npm run dev:server\"",
     "dev:server": "npm run build && node dist/server.js",
     "build": "tsc",
-    "start": "node dist/server.js"
+    "start": "node dist/server.js",
+    "evaluate": "npm run build && python tests/evaluation/generate.py .test-output/evaluation/fixtures && node tests/evaluation/run.cjs"
   },
   "keywords": [],
   "author": "",
@@ -28,7 +29,8 @@
     "sqlite3": "^6.0.1",
     "tesseract.js": "^7.0.0",
     "uuid": "^14.0.2",
-    "zod": "^4.6.5"
+    "zod": "^4.6.5",
+    "@napi-rs/canvas": "^0.1.80"
   },
   "devDependencies": {
     "@types/bcrypt": "^6.0.0",

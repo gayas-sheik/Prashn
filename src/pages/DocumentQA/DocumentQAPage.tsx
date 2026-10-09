@@ -136,7 +136,7 @@ export const DocumentQAPage: React.FC = () => {
       {(error || document.status !== 'Completed') && <p role="status" className="p-3 text-sm text-red-600 border border-red-200 rounded">{error || (document.status === 'Failed' ? document.failureReason : `Document is ${document.status}. Questions become available when processing completes.`)}</p>}
       {/* Top Header & Breadcrumbs */}
       <div className="space-y-2 pb-2 border-b border-[#E2E8F0] dark:border-[#334155]">
-        <div className="flex items-center gap-2 text-[12px] text-[#64748B] dark:text-[#94A3B8]">
+        <div className="flex flex-wrap items-center gap-2 text-[12px] text-[#64748B] dark:text-[#94A3B8]">
           <Link to={`/documents/${document.id}`} className="hover:text-[#1E40AF] flex items-center gap-1 font-medium">
             <ArrowLeft className="w-3.5 h-3.5" /> Back to Inspection
           </Link>
@@ -145,7 +145,7 @@ export const DocumentQAPage: React.FC = () => {
           <span>/</span>
           <Link to="/documents" className="hover:text-[#1E40AF]">Documents</Link>
           <span>/</span>
-          <span className="font-mono text-[#0F172A] dark:text-[#F8FAFC]">{document.name}</span>
+          <span className="font-mono break-all text-[#0F172A] dark:text-[#F8FAFC]">{document.name}</span>
           <span>/</span>
           <span className="font-semibold text-[#1E40AF] dark:text-[#60A5FA]">Document Q&A</span>
         </div>
@@ -157,7 +157,7 @@ export const DocumentQAPage: React.FC = () => {
               <FileText className="w-5 h-5" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="font-bold text-[15px] text-[#0F172A] dark:text-[#F8FAFC]">
                   {document.name}
                 </span>
@@ -165,12 +165,12 @@ export const DocumentQAPage: React.FC = () => {
                   {document.type}
                 </span>
                 <span className="text-[11px] text-[#64748B] dark:text-[#94A3B8] font-mono">
-                  {document.pagesCount} Pages · S3 Encrypted
+                  {document.pagesCount} Pages · Local storage
                 </span>
               </div>
               <div className="text-[11px] text-[#059669] flex items-center gap-1 font-medium mt-0.5">
                 <CheckCircle2 className="w-3.5 h-3.5" />
-                <span>Processed & Indexed in Cloud Vault</span>
+                <span>Processed document</span>
               </div>
             </div>
           </div>

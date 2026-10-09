@@ -24,9 +24,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggleCollapse })
 
   const navItems = [
     { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
-    { label: 'Documents', path: '/documents', icon: FileText, count: '128' },
+    { label: 'Documents', path: '/documents', icon: FileText },
     { label: 'Upload Documents', path: '/upload', icon: UploadCloud },
-    { label: 'Processing Queue', path: '/processing', icon: Cpu, badge: '6 active' },
+    { label: 'Processing Queue', path: '/processing', icon: Cpu },
     { label: 'Activity & Audit Log', path: '/activity', icon: Clock },
     { label: 'Settings', path: '/settings', icon: Settings },
   ];
@@ -51,7 +51,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggleCollapse })
                     Prashn
                   </span>
                   <span className="px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider rounded-[2px] bg-[#EFF6FF] text-[#1E40AF] dark:bg-[#1E3A8A40] dark:text-[#93C5FD]">
-                    Cloud
+                    Local
                   </span>
                 </div>
                 <span className="text-[10px] text-[#64748B] dark:text-[#94A3B8] font-mono">
@@ -89,16 +89,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggleCollapse })
                 {!collapsed && (
                   <span className="truncate flex-1">{item.label}</span>
                 )}
-                {!collapsed && item.count && (
-                  <span className="text-[11px] font-mono tabular-nums px-1.5 py-0.2 rounded-[2px] bg-[#F1F5F9] dark:bg-[#334155] text-[#64748B] dark:text-[#94A3B8]">
-                    {item.count}
-                  </span>
-                )}
-                {!collapsed && item.badge && (
-                  <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-[2px] bg-[#E0F2FE] text-[#0284C7] dark:bg-[#0C4A6E40] dark:text-[#38BDF8]">
-                    {item.badge}
-                  </span>
-                )}
                 {collapsed && (
                   <div className="absolute left-[70px] bg-[#0F172A] text-white text-[12px] px-2 py-1 rounded-[4px] whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity z-50 shadow-layer2">
                     {item.label}
@@ -118,17 +108,17 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggleCollapse })
             <div className="flex items-center justify-between text-[#64748B] dark:text-[#94A3B8] mb-1 font-mono">
               <span className="flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#059669] animate-pulse" />
-                us-east-1
+                Local processing
               </span>
-              <span>100% SLA</span>
+              <span>Local MVP</span>
             </div>
             <div className="flex items-center gap-1 text-[10px] text-[#475569] dark:text-[#94A3B8]">
               <ShieldCheck className="w-3.5 h-3.5 text-[#059669]" />
-              <span>SOC2 Type II Active</span>
+              <span>Account-scoped documents</span>
             </div>
           </div>
         ) : (
-          <div className="flex justify-center p-1" title="Pipeline Health: us-east-1 (100% SLA)">
+          <div className="flex justify-center p-1" title="Local processing workspace">
             <span className="w-2 h-2 rounded-full bg-[#059669] animate-pulse" />
           </div>
         )}
@@ -136,15 +126,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggleCollapse })
         {/* User profile */}
         <div className={`flex items-center gap-2.5 p-1.5 rounded-[4px] hover:bg-[#F1F5F9] dark:hover:bg-[#334155] transition-colors cursor-pointer ${collapsed ? 'justify-center' : ''}`}>
           <div className="w-7 h-7 rounded-full bg-[#1E40AF] text-white flex items-center justify-center text-[11px] font-semibold flex-shrink-0">
-            AP
+            {user?.name.split(/\s+/).map(word => word[0]).join('').slice(0, 2) || 'U'}
           </div>
           {!collapsed && (
             <div className="truncate text-left flex-1">
               <div className="text-[12px] font-medium text-[#0F172A] dark:text-[#F8FAFC] truncate">
-                {user?.name || 'Alex Parker'}
+                {user?.name || 'Account'}
               </div>
               <div className="text-[10px] text-[#64748B] dark:text-[#94A3B8] truncate">
-                Cloud Architect
+                {user?.role || 'user'}
               </div>
             </div>
           )}

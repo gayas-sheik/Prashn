@@ -21,7 +21,7 @@ export async function getLayoutText(page: PDFPageProxy): Promise<string> {
     if (previous && Math.abs(previous.y - run.y) <= tolerance) previous.runs.push(run);
     else rows.push({ y: run.y, height: run.height, runs: [run] });
   }
-  return rows.map(row => {
+  return rows.map((row, index) => {
     row.runs.sort((a, b) => a.x - b.x);
     let line = '';
     let previous: Run | undefined;
@@ -32,6 +32,8 @@ export async function getLayoutText(page: PDFPageProxy): Promise<string> {
       line += separator + run.text;
       previous = run;
     }
-    return line.trim();
+    const previousRow = rows[index - 1];
+    const separated = previousRow && row.y - previousRow.y > Math.max(36, Math.max(row.height, previousRow.height) * 3);
+    return (separated ? '\n' : '') + line.trim();
   }).join('\n').trim();
 }

@@ -3,7 +3,8 @@ import { randomUUID } from 'crypto';
 import { QuestionRepository } from '../repositories/question.repository';
 import { DocumentRepository } from '../repositories/document.repository';
 import { QAMessage } from '../types';
-import { getDocumentAnswerer } from '../processing/document.answerer';
+import { getDocumentAnswerer, NOT_FOUND } from '../processing/document.answerer';
+import { resolveDocumentQuestion } from '../processing/question.language';
 
 const questions = new QuestionRepository();
 const documents = new DocumentRepository();
@@ -30,7 +31,11 @@ export const askQuestion = async (req: Request, res: Response) => {
   if (doc.status !== 'Completed') return res.status(409).json({ error: 'Wait until document processing completes before asking questions' });
   if (!doc.pages?.length) return res.status(409).json({ error: 'Reprocess this document to restore its page content for Q&A' });
   let answer;
-  try { answer = await getDocumentAnswerer().answer(question.trim(), doc); }
+  try {
+    const history = await questions.findByDocumentIdAndUserId(doc.id, userId);
+    const resolved = resolveDocumentQuestion(question.trim(), history);
+    answer = resolved ? await getDocumentAnswerer().answer(resolved, doc) : { text: NOT_FOUND, citations: [] };
+  }
   catch (error) {
     console.error('Q&A provider failed:', error);
     return res.status(503).json({ error: 'Local Q&A model unavailable. Check Ollama and the configured model, then retry.' });
