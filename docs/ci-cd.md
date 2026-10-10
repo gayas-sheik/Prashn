@@ -8,9 +8,9 @@ This is continuous integration with manually approved continuous delivery. It is
 
 | Item | Evidence / current status |
 | --- | --- |
-| Automatic CI | GitHub run [38069908701](https://github.com/gayas-sheik/Prashn/actions/runs/38069908701) passed for commit `95a95cfcacc289075033161443ff0c75246c4e36`. Frontend build/lint, backend regressions, local AWS-emulator checks and infrastructure checks succeeded. Release packaging was skipped in this ordinary push run. |
+| Automatic CI | GitHub run [38072471640](https://github.com/gayas-sheik/Prashn/actions/runs/38072471640) passed for implementation commit `ba092929e5468897e769d3ba499fe9a5c57d5d76`, including frontend build/lint, backend regressions, local AWS-emulator checks, infrastructure checks, release packaging and artifact upload. The earlier run `38069908701` also passed, with packaging skipped before the push-packaging condition was added. |
 | Artifact and release guards | Implemented; local tests cover archive privacy, checksum/revision verification, real shell packaging, release-only change sets, immutable OIDC trust and safe cleanup controls. These are not live AWS deployment tests. |
-| GitHub delivery workflow | Implemented in `.github/workflows/delivery.yml`. Requires activation on default branch, one-time IAM setup, and a successful real delivery run before it can be described as verified. |
+| GitHub delivery workflow | Implemented in `.github/workflows/delivery.yml`, published to default branch `main` by normal fast-forward, and inspected through GitHub's API as active. One-time IAM setup and a successful real delivery run remain pending. |
 | AWS application | The earlier owner-run cloud acceptance passed with limitations and inspected both fleets at zero afterward. That evidence predates CI/CD and does not prove this workflow has deployed anything. |
 
 ## One-time setup in prashn-admin CloudShell
@@ -52,7 +52,7 @@ The role can list document keys and read originals/results for acceptance verifi
 
 ## Make the delivery button available
 
-GitHub requires the `workflow_dispatch` workflow file on the default branch (`main`) to enable manual dispatch. Code must be pushed there through a normal merge or fast-forward; no force push is needed. Once activated, open [repository Actions](https://github.com/gayas-sheik/Prashn/actions), choose **Prashn approved delivery**, then **Run workflow**. [GitHub manual workflow instructions](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow).
+GitHub requires the `workflow_dispatch` workflow file on the default branch (`main`) to enable manual dispatch. This activation has been completed with a normal fast-forward, without force push or AWS deployment. Open [repository Actions](https://github.com/gayas-sheik/Prashn/actions), choose **Prashn approved delivery**, then **Run workflow**. [GitHub manual workflow instructions](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow).
 
 Choose branch **aws-migration-preparation**, enter:
 
