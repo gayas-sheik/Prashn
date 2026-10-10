@@ -1,0 +1,285 @@
+{
+  "Source": "Sanitized dependency metadata inspected in GitHub delivery run 38076990938; account/resource physical IDs omitted",
+  "Changes": [
+    {
+      "ResourceChange": {
+        "LogicalResourceId": "ApiGroup",
+        "ResourceType": "AWS::AutoScaling::AutoScalingGroup",
+        "Action": "Modify",
+        "Replacement": "Conditional",
+        "Details": [
+          {
+            "Target": {
+              "Attribute": "Properties",
+              "Name": "LaunchTemplate",
+              "RequiresRecreation": "Conditionally"
+            },
+            "Evaluation": "Dynamic",
+            "ChangeSource": "ResourceAttribute",
+            "CausingEntity": "ApiLaunch.LatestVersionNumber"
+          }
+        ]
+      }
+    },
+    {
+      "ResourceChange": {
+        "LogicalResourceId": "ApiLaunch",
+        "ResourceType": "AWS::EC2::LaunchTemplate",
+        "Action": "Modify",
+        "Replacement": "False",
+        "Details": [
+          {
+            "Target": {
+              "Attribute": "Properties",
+              "Name": "LaunchTemplateData",
+              "RequiresRecreation": "Never"
+            },
+            "Evaluation": "Dynamic",
+            "ChangeSource": "DirectModification",
+            "CausingEntity": null
+          },
+          {
+            "Target": {
+              "Attribute": "Properties",
+              "Name": "LaunchTemplateData",
+              "RequiresRecreation": "Never"
+            },
+            "Evaluation": "Static",
+            "ChangeSource": "ParameterReference",
+            "CausingEntity": "ArtifactKey"
+          },
+          {
+            "Target": {
+              "Attribute": "Properties",
+              "Name": "LaunchTemplateData",
+              "RequiresRecreation": "Never"
+            },
+            "Evaluation": "Static",
+            "ChangeSource": "ParameterReference",
+            "CausingEntity": "ArtifactDigest"
+          }
+        ]
+      }
+    },
+    {
+      "ResourceChange": {
+        "LogicalResourceId": "ApiRequestScaling",
+        "ResourceType": "AWS::AutoScaling::ScalingPolicy",
+        "Action": "Modify",
+        "Replacement": "Conditional",
+        "Details": [
+          {
+            "Target": {
+              "Attribute": "Properties",
+              "Name": "AutoScalingGroupName",
+              "RequiresRecreation": "Always"
+            },
+            "Evaluation": "Dynamic",
+            "ChangeSource": "ResourceReference",
+            "CausingEntity": "ApiGroup"
+          }
+        ]
+      }
+    },
+    {
+      "ResourceChange": {
+        "LogicalResourceId": "ApiRole",
+        "ResourceType": "AWS::IAM::Role",
+        "Action": "Modify",
+        "Replacement": "False",
+        "Details": [
+          {
+            "Target": {
+              "Attribute": "Properties",
+              "Name": "Policies",
+              "RequiresRecreation": "Never"
+            },
+            "Evaluation": "Static",
+            "ChangeSource": "ParameterReference",
+            "CausingEntity": "ArtifactKey"
+          },
+          {
+            "Target": {
+              "Attribute": "Properties",
+              "Name": "Policies",
+              "RequiresRecreation": "Never"
+            },
+            "Evaluation": "Dynamic",
+            "ChangeSource": "DirectModification",
+            "CausingEntity": null
+          }
+        ]
+      }
+    },
+    {
+      "ResourceChange": {
+        "LogicalResourceId": "QueueBacklog",
+        "ResourceType": "AWS::CloudWatch::Alarm",
+        "Action": "Modify",
+        "Replacement": "False",
+        "Details": [
+          {
+            "Target": {
+              "Attribute": "Properties",
+              "Name": "AlarmActions",
+              "RequiresRecreation": "Never"
+            },
+            "Evaluation": "Dynamic",
+            "ChangeSource": "ResourceReference",
+            "CausingEntity": "QueueScaling"
+          }
+        ]
+      }
+    },
+    {
+      "ResourceChange": {
+        "LogicalResourceId": "QueueIdleScaling",
+        "ResourceType": "AWS::AutoScaling::ScalingPolicy",
+        "Action": "Modify",
+        "Replacement": "Conditional",
+        "Details": [
+          {
+            "Target": {
+              "Attribute": "Properties",
+              "Name": "AutoScalingGroupName",
+              "RequiresRecreation": "Always"
+            },
+            "Evaluation": "Dynamic",
+            "ChangeSource": "ResourceReference",
+            "CausingEntity": "WorkerGroup"
+          }
+        ]
+      }
+    },
+    {
+      "ResourceChange": {
+        "LogicalResourceId": "QueueIdle",
+        "ResourceType": "AWS::CloudWatch::Alarm",
+        "Action": "Modify",
+        "Replacement": "False",
+        "Details": [
+          {
+            "Target": {
+              "Attribute": "Properties",
+              "Name": "AlarmActions",
+              "RequiresRecreation": "Never"
+            },
+            "Evaluation": "Dynamic",
+            "ChangeSource": "ResourceReference",
+            "CausingEntity": "QueueIdleScaling"
+          }
+        ]
+      }
+    },
+    {
+      "ResourceChange": {
+        "LogicalResourceId": "QueueScaling",
+        "ResourceType": "AWS::AutoScaling::ScalingPolicy",
+        "Action": "Modify",
+        "Replacement": "Conditional",
+        "Details": [
+          {
+            "Target": {
+              "Attribute": "Properties",
+              "Name": "AutoScalingGroupName",
+              "RequiresRecreation": "Always"
+            },
+            "Evaluation": "Dynamic",
+            "ChangeSource": "ResourceReference",
+            "CausingEntity": "WorkerGroup"
+          }
+        ]
+      }
+    },
+    {
+      "ResourceChange": {
+        "LogicalResourceId": "WorkerGroup",
+        "ResourceType": "AWS::AutoScaling::AutoScalingGroup",
+        "Action": "Modify",
+        "Replacement": "Conditional",
+        "Details": [
+          {
+            "Target": {
+              "Attribute": "Properties",
+              "Name": "LaunchTemplate",
+              "RequiresRecreation": "Conditionally"
+            },
+            "Evaluation": "Dynamic",
+            "ChangeSource": "ResourceAttribute",
+            "CausingEntity": "WorkerLaunch.LatestVersionNumber"
+          }
+        ]
+      }
+    },
+    {
+      "ResourceChange": {
+        "LogicalResourceId": "WorkerLaunch",
+        "ResourceType": "AWS::EC2::LaunchTemplate",
+        "Action": "Modify",
+        "Replacement": "False",
+        "Details": [
+          {
+            "Target": {
+              "Attribute": "Properties",
+              "Name": "LaunchTemplateData",
+              "RequiresRecreation": "Never"
+            },
+            "Evaluation": "Dynamic",
+            "ChangeSource": "DirectModification",
+            "CausingEntity": null
+          },
+          {
+            "Target": {
+              "Attribute": "Properties",
+              "Name": "LaunchTemplateData",
+              "RequiresRecreation": "Never"
+            },
+            "Evaluation": "Static",
+            "ChangeSource": "ParameterReference",
+            "CausingEntity": "ArtifactKey"
+          },
+          {
+            "Target": {
+              "Attribute": "Properties",
+              "Name": "LaunchTemplateData",
+              "RequiresRecreation": "Never"
+            },
+            "Evaluation": "Static",
+            "ChangeSource": "ParameterReference",
+            "CausingEntity": "ArtifactDigest"
+          }
+        ]
+      }
+    },
+    {
+      "ResourceChange": {
+        "LogicalResourceId": "WorkerRole",
+        "ResourceType": "AWS::IAM::Role",
+        "Action": "Modify",
+        "Replacement": "False",
+        "Details": [
+          {
+            "Target": {
+              "Attribute": "Properties",
+              "Name": "Policies",
+              "RequiresRecreation": "Never"
+            },
+            "Evaluation": "Static",
+            "ChangeSource": "ParameterReference",
+            "CausingEntity": "ArtifactKey"
+          },
+          {
+            "Target": {
+              "Attribute": "Properties",
+              "Name": "Policies",
+              "RequiresRecreation": "Never"
+            },
+            "Evaluation": "Dynamic",
+            "ChangeSource": "DirectModification",
+            "CausingEntity": null
+          }
+        ]
+      }
+    }
+  ]
+}

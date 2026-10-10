@@ -69,18 +69,61 @@ def previous_parameters(parameters, digest):
     return result
 
 
-def validate_change_set(change, previous):
+def expected_dependency_change(resource, changed_ids):
+    """Allow only the reviewed launch-version dependency chain.
+
+    The caller has already required an identical previous template, changed
+    only artifact parameters and preserved the resolved AMI. Launch template
+    IDs and group-name references are unchanged; dynamic version evaluation
+    makes CloudFormation conservatively label groups/policies Conditional.
+    """
+    rules = {
+        'ApiGroup': ('LaunchTemplate', 'ResourceAttribute', 'ApiLaunch.LatestVersionNumber', 'Conditionally'),
+        'WorkerGroup': ('LaunchTemplate', 'ResourceAttribute', 'WorkerLaunch.LatestVersionNumber', 'Conditionally'),
+        'ApiRequestScaling': ('AutoScalingGroupName', 'ResourceReference', 'ApiGroup', 'Always'),
+        'QueueScaling': ('AutoScalingGroupName', 'ResourceReference', 'WorkerGroup', 'Always'),
+        'QueueIdleScaling': ('AutoScalingGroupName', 'ResourceReference', 'WorkerGroup', 'Always'),
+        'QueueBacklog': ('AlarmActions', 'ResourceReference', 'QueueScaling', 'Never'),
+        'QueueIdle': ('AlarmActions', 'ResourceReference', 'QueueIdleScaling', 'Never'),
+    }
+    rule = rules.get(resource.get('LogicalResourceId'))
+    if not rule or rule[2].split('.')[0] not in changed_ids:
+        return False
+    details = resource.get('Details', [])
+    return bool(details) and all(
+        detail.get('Target', {}).get('Attribute') == 'Properties'
+        and detail.get('Target', {}).get('Name') == rule[0]
+        and detail.get('Target', {}).get('RequiresRecreation') == rule[3]
+        and detail.get('Evaluation') == 'Dynamic'
+        and detail.get('ChangeSource') == rule[1]
+        and detail.get('CausingEntity') == rule[2]
+        for detail in details)
+
+
+def validate_change_set(change, previous, resources=None):
     require(bool(change.get('Changes')), 'Change set contains no release changes')
     allowed = {'ApiLaunch': 'AWS::EC2::LaunchTemplate', 'WorkerLaunch': 'AWS::EC2::LaunchTemplate',
                'ApiGroup': 'AWS::AutoScaling::AutoScalingGroup', 'WorkerGroup': 'AWS::AutoScaling::AutoScalingGroup',
-               'ApiRole': 'AWS::IAM::Role', 'WorkerRole': 'AWS::IAM::Role'}
+               'ApiRole': 'AWS::IAM::Role', 'WorkerRole': 'AWS::IAM::Role',
+               'ApiRequestScaling': 'AWS::AutoScaling::ScalingPolicy',
+               'QueueScaling': 'AWS::AutoScaling::ScalingPolicy', 'QueueIdleScaling': 'AWS::AutoScaling::ScalingPolicy',
+               'QueueBacklog': 'AWS::CloudWatch::Alarm', 'QueueIdle': 'AWS::CloudWatch::Alarm'}
+    changed_ids = {entry['ResourceChange']['LogicalResourceId'] for entry in change['Changes']}
+    require(len(changed_ids) == len(change['Changes']), 'Duplicate resource changes')
     for entry in change.get('Changes', []):
         r = entry['ResourceChange']
+        dependent = r.get('LogicalResourceId') in ('ApiGroup', 'WorkerGroup', 'ApiRequestScaling', 'QueueScaling', 'QueueIdleScaling', 'QueueBacklog', 'QueueIdle')
+        replacement_ok = r.get('Replacement') == 'False' or (
+            r.get('Replacement') == 'Conditional' and dependent and r['LogicalResourceId'] not in ('QueueBacklog', 'QueueIdle'))
         require(r['LogicalResourceId'] in allowed and r['ResourceType'] == allowed[r['LogicalResourceId']]
-                and r['Action'] == 'Modify' and r.get('Replacement') == 'False',
+                and r['Action'] == 'Modify' and replacement_ok
+                and (not dependent or expected_dependency_change(r, changed_ids)),
                 'Refused unreviewed change: '
                 + str(r.get('LogicalResourceId')) + ' (' + str(r.get('ResourceType'))
                 + ', action=' + str(r.get('Action')) + ', replacement=' + str(r.get('Replacement')) + ')')
+        if resources is not None:
+            require(r.get('PhysicalResourceId') == resources.get(r['LogicalResourceId']),
+                    'Proposed change does not refer to the existing physical resource: ' + r['LogicalResourceId'])
     old = {p['ParameterKey']: p for p in previous}
     new = {p['ParameterKey']: p for p in change.get('Parameters', [])}
     for key, value in old.items():
@@ -175,7 +218,7 @@ class Delivery(Audit):
         folder_out.mkdir(parents=True, exist_ok=True)
         (folder_out / 'change-summary.json').write_text(json.dumps(proposed_change_summary(change, revision, id_), indent=2))
         try:
-            validate_change_set(change, stack['Parameters'])
+            validate_change_set(change, stack['Parameters'], self.resources)
         except AssertionError:
             self.aws('cloudformation', 'delete-change-set', '--change-set-name', id_, '--stack-name', self.args.stack)
             raise
@@ -183,6 +226,10 @@ class Delivery(Audit):
         self.aws('cloudformation', 'execute-change-set', '--change-set-name', id_, '--stack-name', self.args.stack)
         complete = self.wait_stack(2700, expected_digest=digest)
         require(complete['StackStatus'] == 'UPDATE_COMPLETE', 'Release did not reach UPDATE_COMPLETE; inspect stack events')
+        rows = self.aws('cloudformation', 'describe-stack-resources', '--stack-name', self.args.stack)['StackResources']
+        current = {row['LogicalResourceId']: row['PhysicalResourceId'] for row in rows}
+        require(all(current.get(key) == self.resources[key] for key in ('ApiGroup', 'WorkerGroup', 'ApiLaunch', 'WorkerLaunch', 'ApiRole', 'WorkerRole')),
+                'An existing workload resource changed identity; operator review required')
         bucket = self.outputs['FrontendBucket']
         self.aws('s3', 'sync', str(folder / 'frontend'), 's3://' + bucket + '/', '--exclude', 'index.html',
                  '--cache-control', 'public,max-age=31536000,immutable', '--only-show-errors')

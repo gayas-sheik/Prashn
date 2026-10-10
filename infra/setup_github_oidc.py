@@ -80,10 +80,13 @@ def deployment_policy(b):
          'autoscaling:DescribeScalingProcessTypes'], '*', {'StringEquals': {'aws:RequestedRegion': region}})
     add(['ec2:CreateLaunchTemplateVersion', 'ec2:DeleteLaunchTemplateVersions', 'ec2:ModifyLaunchTemplate'], b['launchArns'])
     add(['autoscaling:UpdateAutoScalingGroup', 'autoscaling:SetDesiredCapacity', 'autoscaling:SuspendProcesses',
-         'autoscaling:ResumeProcesses', 'autoscaling:TerminateInstanceInAutoScalingGroup'], b['groupArns'])
+         'autoscaling:ResumeProcesses', 'autoscaling:TerminateInstanceInAutoScalingGroup',
+         'autoscaling:PutScalingPolicy', 'autoscaling:DeletePolicy'], b['groupArns'])
+    add(['cloudwatch:DescribeAlarms', 'cloudwatch:PutMetricAlarm', 'cloudwatch:DeleteAlarms',
+         'cloudwatch:ListTagsForResource'], b['alarmArns'])
     add(['iam:GetRole', 'iam:GetRolePolicy', 'iam:ListRolePolicies', 'iam:ListAttachedRolePolicies', 'iam:PutRolePolicy', 'iam:DeleteRolePolicy'], b['roleArns'])
     add(['iam:GetInstanceProfile'], b['profileArns'])
-    add(['iam:PassRole'], b['roleArns'], {'StringEquals': {'iam:PassedToService': 'ec2.amazonaws.com'}})
+    add(['iam:PassRole'], b['roleArns'], {'StringEquals': {'iam:PassedToService': ['ec2.amazonaws.com', 'autoscaling.amazonaws.com']}})
     add(['iam:DeleteRolePermissionsBoundary', 'iam:PutRolePermissionsBoundary'], b['roleArns'], effect='Deny')
     add(['iam:CreatePolicyVersion', 'iam:SetDefaultPolicyVersion', 'iam:DeletePolicyVersion', 'iam:DeletePolicy'], b['boundaryArns'], effect='Deny')
     add(['s3:GetBucketLocation', 's3:GetBucketPolicy', 's3:GetBucketPublicAccessBlock', 's3:GetEncryptionConfiguration'], [doc, front])
@@ -128,6 +131,8 @@ class Setup(Audit):
         b['launchArns'] = [f'arn:aws:ec2:{region}:{account}:launch-template/{self.resources[k+"Launch"]}' for k in ('Api','Worker')]
         groups = self.group_state()
         b['groupArns'] = [g['AutoScalingGroupARN'] for g in groups]
+        b['alarmArns'] = [f'arn:aws:cloudwatch:{region}:{account}:alarm:' + self.resources[k] for k in ('QueueBacklog', 'QueueIdle')]
+        b['alarmArns'].append(f'arn:aws:cloudwatch:{region}:{account}:alarm:TargetTracking-' + self.outputs['ApiGroup'] + '-*')
         b['roleArns'] = [f'arn:aws:iam::{account}:role/{self.resources[k+"Role"]}' for k in ('Api','Worker')]
         b['profileArns'] = [f'arn:aws:iam::{account}:instance-profile/{self.resources[k+"Profile"]}' for k in ('Api','Worker')]
         b['boundaryArns'] = [f'arn:aws:iam::{account}:policy/{self.args.stack}-{k.lower()}-boundary' for k in ('Api','Worker')]

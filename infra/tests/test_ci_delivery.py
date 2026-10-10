@@ -141,7 +141,7 @@ class DeliveryTests(unittest.TestCase):
     def test_private_signing_secret_is_not_granted_to_deployment_role(self):
         bindings = dict(account='683146427271',region='us-east-1',DocumentBucket='docs',FrontendBucket='front',ArtifactBucket='artifacts',
                         DataTable='table',stackArn='stack',launchArns=['lt'],groupArns=['asg'],roleArns=['role'],profileArns=['profile'],
-                        boundaryArns=['boundary'],queueArns=['queue'],logArn='logs',distributionArn='distribution',amiParameter='/aws/service/canonical/ubuntu/ami-id')
+                        boundaryArns=['boundary'],queueArns=['queue'],alarmArns=['owned-alarm'],logArn='logs',distributionArn='distribution',amiParameter='/aws/service/canonical/ubuntu/ami-id')
         policy = setup.deployment_policy(bindings)
         grants = [s for s in policy['Statement'] if s['Effect']=='Allow']
         actions = {a for s in grants for a in s['Action']}
@@ -152,6 +152,59 @@ class DeliveryTests(unittest.TestCase):
         self.assertIn('/aws/service/canonical/ubuntu/',ssm['Resource'])
         deny = next(s for s in policy['Statement'] if 'iam:DeleteRolePermissionsBoundary' in s['Action'])
         self.assertEqual(deny['Effect'],'Deny')
+        scaling = next(s for s in grants if 'autoscaling:PutScalingPolicy' in s['Action'])
+        alarms = next(s for s in grants if 'cloudwatch:PutMetricAlarm' in s['Action'])
+        self.assertEqual(scaling['Resource'],['asg'])
+        self.assertEqual(alarms['Resource'],['owned-alarm'])
+        self.assertNotIn('autoscaling:CreateAutoScalingGroup',actions)
+        passed = next(s for s in grants if 'iam:PassRole' in s['Action'])
+        self.assertEqual(passed['Resource'],['role'])
+        self.assertEqual(passed['Condition']['StringEquals']['iam:PassedToService'],['ec2.amazonaws.com','autoscaling.amazonaws.com'])
+
+    def observed_change(self):
+        fixture = json.loads((Path(__file__).parent/'fixtures/observed-release-dependencies.json').read_text())
+        _, params = self.change()
+        fixture['Parameters'] = params
+        resources = {entry['ResourceChange']['LogicalResourceId']:'fixture-'+entry['ResourceChange']['LogicalResourceId'] for entry in fixture['Changes']}
+        for entry in fixture['Changes']:
+            entry['ResourceChange']['PhysicalResourceId'] = resources[entry['ResourceChange']['LogicalResourceId']]
+        return fixture, params, resources
+
+    def test_observed_launch_version_dependency_chain_is_allowed(self):
+        change, params, resources = self.observed_change()
+        delivery.validate_change_set(change,params,resources)
+        self.assertEqual(len(change['Changes']),11)
+
+    def test_dependency_chain_rejects_static_edits_unrelated_properties_and_replacements(self):
+        change, params, resources = self.observed_change()
+        for logical in ('ApiGroup','WorkerGroup','ApiRequestScaling','QueueScaling','QueueIdleScaling','QueueBacklog','QueueIdle'):
+            for field, value in [('Evaluation','Static'),('ChangeSource','DirectModification'),('CausingEntity','Data')]:
+                bad = deepcopy(change)
+                row = next(e['ResourceChange'] for e in bad['Changes'] if e['ResourceChange']['LogicalResourceId']==logical)
+                row['Details'][0][field]=value
+                with self.subTest(logical=logical,field=field), self.assertRaises(AssertionError):
+                    delivery.validate_change_set(bad,params,resources)
+            for replacement in ('True',None):
+                bad=deepcopy(change)
+                next(e['ResourceChange'] for e in bad['Changes'] if e['ResourceChange']['LogicalResourceId']==logical)['Replacement']=replacement
+                with self.subTest(logical=logical,replacement=replacement),self.assertRaises(AssertionError):
+                    delivery.validate_change_set(bad,params,resources)
+            bad=deepcopy(change)
+            row=next(e['ResourceChange'] for e in bad['Changes'] if e['ResourceChange']['LogicalResourceId']==logical)
+            row['Details'].append({'Target':{'Attribute':'Properties','Name':'MaxSize','RequiresRecreation':'Never'},'Evaluation':'Static','ChangeSource':'DirectModification'})
+            with self.subTest(logical=logical,extra=True),self.assertRaises(AssertionError):delivery.validate_change_set(bad,params,resources)
+
+    def test_dependency_chain_requires_existing_identity_and_known_upstream_changes(self):
+        change, params, resources=self.observed_change()
+        bad=deepcopy(change)
+        bad['Changes'][0]['ResourceChange']['PhysicalResourceId']='unexpected-group'
+        with self.assertRaises(AssertionError):delivery.validate_change_set(bad,params,resources)
+        bad=deepcopy(change)
+        bad['Changes']=[e for e in bad['Changes'] if e['ResourceChange']['LogicalResourceId']!='ApiLaunch']
+        with self.assertRaises(AssertionError):delivery.validate_change_set(bad,params,resources)
+        bad=deepcopy(change)
+        bad['Changes'][0]['ResourceChange']['Details']=[]
+        with self.assertRaises(AssertionError):delivery.validate_change_set(bad,params,resources)
 
     def test_live_acceptance_rejects_old_deployed_commit(self):
         audit = Audit(SimpleNamespace(account='683146427271',stack='prashn-cloud-v2',region='us-east-1',expected_release='a'*40))
