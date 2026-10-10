@@ -52,6 +52,7 @@ Public browser and origin connections use HTTPS. API Gateway reaches the interna
 | `infra/verify-native.sh` | Native dependency smoke checks; rebuilds an incompatible SQLite binary on Linux |
 | `infra/signal-ready.sh` | IMDSv2 instance ID and creation/update-only CloudFormation readiness handshake |
 | `infra/tests/test_signal_ready.py` | Stubbed handshake regression checks; no AWS or metadata network requests |
+| `infra/scaling_demo.py` | Bounded health traffic for an operator-observed API scaling demonstration |
 | `backend/src/worker.ts` | Standalone SQS worker |
 | `backend/src/migrate.ts` | Read-only snapshot validation; explicit import with `--apply` |
 | `backend/src/reconcile.ts` | Read-only orphan review; explicit cleanup with `--apply` |
@@ -71,6 +72,16 @@ The owner supplied read-only `us-east-1` results: load balancers `0`, HTTP APIs 
 The minimum fleet runs **two new instances**, an ALB, two 20 GiB gp3 disks and two public IPv4 addresses, plus request/storage/logging services. A planning estimate is **roughly $60/month for baseline infrastructure**, before variable requests, load-balancer capacity, storage growth, taxes, credits and the existing server. Scaling to four instances adds compute, disks and addresses. This is an estimate, not an account-specific quote. Review [EC2 T3 pricing](https://aws.amazon.com/ec2/instance-types/t3/), [ALB pricing](https://aws.amazon.com/elasticloadbalancing/pricing/) and [public IPv4 pricing](https://aws.amazon.com/vpc/pricing/), and calculate the chosen region/workload in the [AWS Pricing Calculator](https://calculator.aws/).
 
 This exceeds the current $10 monthly alert amount if run continuously. Alerts are not a cap; eligible usage consumes credits. The script does not upgrade the account plan. Free-plan access or service quotas may still block resource creation.
+
+The owner subsequently selected **testing/demo-only uptime** and a **$4 total additional testing allowance before credits**. A read-only Free Tier API response reports an active **FREE** plan with **$139.61** remaining credits and plan expiration **6 January 2027**; this is an observed response, not a real-time bill or a guarantee that every charge is eligible. Credits/billing estimates can lag actual usage. Keep this allowance separate from ongoing baseline hosting and the original server. No live traffic test had started when this limit was agreed.
+
+Check plan state without provisioning:
+
+```bash
+aws freetier get-account-plan-state --region us-east-1 --query '{Plan:accountPlanType,Status:accountPlanStatus,RemainingCredits:accountPlanRemainingCredits,Expires:accountPlanExpirationDate}' --output json --no-cli-pager
+```
+
+The load balancer still costs money while instances are paused. Pausing compute is a reduction, not zero-cost hosting. Before leaving resources running for days, review Billing/credits, the original server and retained resources from the failed attempt. Original data must be backed up before its server is retired.
 
 ## Deployment procedure
 
@@ -143,15 +154,57 @@ Prepare the new backend dependencies/build on the authenticated operator machine
 python3 infra/cloud_command.py migrate prashn-cloud-v2 --snapshot /private/snapshot
 ```
 
-The validator checks ownership, identity collisions, structured JSON, source paths and original checksums before import. It never merges accounts by matching email alone. Review the record counts and resolve any collision without changing ownership incorrectly. For the consistent final cutover, pause both new Auto Scaling groups at desired/minimum zero through the operator's AWS controls before applying the import; this is deliberate maintenance, not the normal stack setting.
+The validator checks ownership, identity collisions, structured JSON, source paths and original checksums before import. It never merges accounts by matching email alone. Review the record counts and resolve any collision without changing ownership incorrectly. For the consistent final cutover, pause both new Auto Scaling groups at desired/minimum/maximum zero through the operator's AWS controls before applying the import; this is deliberate maintenance, not the normal stack setting.
 
 ```bash
 python3 infra/cloud_command.py migrate prashn-cloud-v2 --snapshot /private/snapshot --apply
 ```
 
-The importer reads SQLite read-only, preserves user IDs/password hashes, uploads originals and full evidence, imports ordered history/activity and verifies target ownership/checksums. Retry against the same unchanged source can resume an interrupted import without duplicating imported history. S3 and DynamoDB do not share a transaction; an interrupted import can leave partial target state, so do not accept users until verification succeeds. Restore the groups to minimum/desired one afterward. Pending or legacy records without page evidence are dispatched for reprocessing.
+The importer reads SQLite read-only, preserves user IDs/password hashes, uploads originals and full evidence, imports ordered history/activity and verifies target ownership/checksums. Retry against the same unchanged source can resume an interrupted import without duplicating imported history. S3 and DynamoDB do not share a transaction; an interrupted import can leave partial target state, so do not accept users until verification succeeds. Restore the groups to minimum/desired one and the reviewed maximum afterward. Pending or legacy records without page evidence are dispatched for reprocessing.
 
 Verify migrated login, document counts, representative original bytes, fields, page text, citations and history before cutover. New-domain users sign in again. Do not rerun an old snapshot to overwrite subsequent user changes or intentionally deleted records. Keep the old installation and snapshot until rollback/restore has been exercised. Actual production data has not been copied or imported during preparation.
+
+## Bounded API scaling demonstration
+
+The inspected live API policy is `TargetTrackingScaling`, `ALBRequestCountPerTarget`, target **100 requests/minute per target**. Both live groups were at minimum/desired/current **1**, maximum **2**. Observe these values again before testing if configuration has changed.
+
+From CloudShell inside the separate tmux session, run the owned website only:
+
+```bash
+set -o pipefail
+python3 infra/scaling_demo.py --url https://d1ew9wh9ondbo.cloudfront.net --seconds 360 --rate 4 2>&1 | tee "$HOME/prashn-api-scaling-demo.log"
+```
+
+The tool sends one cloud-health preflight and at most **1,440 load requests**, capped at four/second and eight in-flight. It avoids catch-up bursts, has request timeouts and stops scheduling after five failed requests. Already in-flight requests finish. It has no AWS credentials or capacity-changing calls. Existing policies may launch one additional API instance under the inspected maximum; the worker receives no test jobs. This test can consume credits and is subject to the agreed $4 additional allowance. Duration/rate are enforced by the script, not by billing. No live scaling result is claimed until activities and instance counts are inspected.
+
+After traffic finishes, inspect the API group and its recent activities:
+
+```bash
+aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names prashn-cloud-v2-ApiGroup-wNaD6zJovorZ --region us-east-1 --query 'AutoScalingGroups[].{Group:AutoScalingGroupName,Desired:DesiredCapacity,Max:MaxSize,Instances:Instances[].{ID:InstanceId,State:LifecycleState,Health:HealthStatus}}' --output json --no-cli-pager
+aws autoscaling describe-scaling-activities --auto-scaling-group-name prashn-cloud-v2-ApiGroup-wNaD6zJovorZ --max-items 5 --region us-east-1 --query 'Activities[].{Time:StartTime,Status:StatusCode,Cause:Cause,Description:Description}' --output json --no-cli-pager
+```
+
+A policy-triggered activity and changed capacity are the evidence for automatic scale-out. HTTP success alone is not that evidence. Allow for metric/provisioning delay without repeating traffic indefinitely. Record any failed/incomplete result. Worker queue scaling and automatic scale-in require separate observations; an operator pause is not proof of automatic scale-in.
+
+## Demo-only pause and resume
+
+Finish uploads/processing and capture the scaling evidence before pausing. Pausing intentionally makes the API/login/upload/Q&A unavailable. Documents/history remain in managed storage by design; actual pause/resume persistence still needs verification. Review visible/in-flight queue counts before stopping a busy worker. The original EC2 server is separate and is not covered by these commands.
+
+For the inspected `prashn-cloud-v2` groups, pause both by setting **minimum, maximum and desired to zero**. A zero maximum prevents a scaling alarm from relaunching capacity. Stop the API first to close admission, then the worker after pending work finishes:
+
+```bash
+aws autoscaling update-auto-scaling-group --auto-scaling-group-name prashn-cloud-v2-ApiGroup-wNaD6zJovorZ --min-size 0 --max-size 0 --desired-capacity 0 --region us-east-1 --no-cli-pager
+aws autoscaling update-auto-scaling-group --auto-scaling-group-name prashn-cloud-v2-WorkerGroup-7tyvnqSr5bU0 --min-size 0 --max-size 0 --desired-capacity 0 --region us-east-1 --no-cli-pager
+```
+
+This is an intentional operational change from the stack's default sizing, not stack deletion. Verify both groups have zero instances after termination completes. Do not stop individual ASG instances: the group can replace them. The retained ALB, storage and original server still cost money. Before the next demo or deployment update, explicitly resume the reviewed baseline:
+
+```bash
+aws autoscaling update-auto-scaling-group --auto-scaling-group-name prashn-cloud-v2-WorkerGroup-7tyvnqSr5bU0 --min-size 1 --max-size 2 --desired-capacity 1 --region us-east-1 --no-cli-pager
+aws autoscaling update-auto-scaling-group --auto-scaling-group-name prashn-cloud-v2-ApiGroup-wNaD6zJovorZ --min-size 1 --max-size 2 --desired-capacity 1 --region us-east-1 --no-cli-pager
+```
+
+Wait for healthy instances and HTTPS health before allowing uploads; verify existing login, documents and question history. The CloudFront address remains associated with the retained distribution. Avoid redeploying solely to pause/resume. Recheck sizing after a CloudFormation update.
 
 ## Local validation
 
@@ -204,7 +257,7 @@ See [the preparation verification report](aws-migration-test-report.md) for exec
 - Deletion, queueing and S3 writes cross service boundaries. Fences, outbox recovery and reconciliation cover tested cases, but crash/provider outage tests must be repeated in AWS. Reconciliation is conservative and runs daily; manual orphan inspection is available through `cloud_command.py reconcile` before `--apply`.
 - Metrics report configured concurrency per worker, not a live cluster-wide worker count. Scaling policies and logs require live observations to verify resource behavior.
 - DynamoDB point-in-time recovery is configured; coordinated S3/database restore has not been demonstrated. Data, frontend buckets, artifacts and log groups are retained on stack removal and can continue to incur charges. The SSM secret is managed by the script outside the main stack.
-- Do not stop individual ASG instances as a cost-control method: the group can replace them. For a temporary pause, intentionally reduce group minimum/desired capacity; ALB and retained storage still incur charges. Review a deliberate stack teardown separately from data deletion.
+- Do not stop individual ASG instances as a cost-control method: the group can replace them. For a temporary pause, deliberately set group minimum/maximum/desired capacity to zero; ALB and retained storage still incur charges. Review a deliberate stack teardown separately from data deletion.
 - Development/build dependency advisories remain. Password recovery, token revocation, per-user/IP abuse controls, a complete production security review and CI/CD are not included. API Gateway's configured throttling is a service-level control.
 
 **Current verdict: website publication and public health/auth rejection checks passed for the corrected cloud release. Full cloud acceptance, scaling, new-stack logging, browser workflows and production data migration remain unfinished.**

@@ -53,16 +53,34 @@ Infrastructure lint initially found a missing VPC-link name and an invalid IAM `
 
 | Requirement | Code/configuration | Executed evidence | Live AWS verification |
 | --- | --- | --- | --- |
-| S3 originals/results and private downloads | IMPLEMENTED | TESTED; inspected emulator results and byte comparisons; live health reports S3 mode | Document lifecycle/download verification pending |
-| DynamoDB accounts/documents/history/activity | IMPLEMENTED | TESTED; inspected ownership, history, migration and large-output results; live health reports DynamoDB mode | Account/document/history verification pending |
-| SQS workers, retry, leases and recovery | IMPLEMENTED | TESTED; inspected duplicate, fault, heartbeat and deletion cases; live health reports SQS mode | Actual job processing/recovery verification pending |
-| Automatic API/worker scaling | IMPLEMENTED in template | TESTED by schema validation only | BLOCKED; no live scaling event executed |
-| CloudWatch logs/metrics/alarms | IMPLEMENTED in bootstrap/template | TESTED by source/schema review and inspected owner-supplied log-stream/event output | VERIFIED for application log delivery in the first rolled-back attempt; v2 logs/metrics/alarms/bootstrap stream remain unverified |
-| Single-entry deployment | IMPLEMENTED | Shell/template/handshake checks passed; corrected retry printed website; independent HTTP checks passed | VERIFIED for reachable release and frontend publication; explicit stack/signal-event inspection pending; historical failed attempts retained below |
+| S3 originals/results and private downloads | IMPLEMENTED | TESTED; emulator byte comparisons plus inspected v2 object listing and matching result reference | VERIFIED for original/result object presence for one completed document; private-download/deletion/fault cases pending |
+| DynamoDB accounts/documents/history/activity | IMPLEMENTED | TESTED; emulator cases plus strong scan of v2 completion metadata; owner reported login/history persistence | VERIFIED for the inspected document metadata/result reference; full identity/isolation/history/CRUD inspection pending |
+| SQS workers, retry, leases and recovery | IMPLEMENTED | TESTED; emulator cases plus live sent/received/deleted metrics and matching completion event | VERIFIED for the observed one-job happy path; failures/retry/duplicates/recovery pending |
+| Automatic API/worker scaling | IMPLEMENTED in template | TESTED by schema validation and inspected actual API policy/ASG sizing | VERIFIED for configured policy/bounds only; no live scaling event executed |
+| CloudWatch logs/metrics/alarms | IMPLEMENTED in bootstrap/template | TESTED by source/schema review and inspected owner-supplied application events and SQS metrics | VERIFIED for supplied v2 job-completion log and SQS metric delivery; agent metrics/alarms/bootstrap stream pending |
+| Single-entry deployment | IMPLEMENTED | Shell/template/handshake checks passed; corrected retry printed website; independent HTTP checks and owner stack-state inspection passed | VERIFIED: v2 `CREATE_COMPLETE`, reachable release and frontend publication; individual signal events not collected; historical failures retained below |
 | Existing-data import | IMPLEMENTED | TESTED with private synthetic snapshot; repeat import/source-preservation inspected | BLOCKED; real production data not imported |
 | Rendered AWS UI and error states | Existing design retained; upload integration changed | Frontend compile/lint passed | BLOCKED pending deployed browser checks |
 
 These statuses do not upgrade the earlier local audit or owner-reported browser checks into independent cloud acceptance. Remaining limits and live acceptance steps are recorded in [the migration guide](aws-migration.md). **No complete AWS migration or production-readiness claim is made.**
+
+## Current live document and cost observations
+
+The owner supplied `prashn-cloud-v2` status **CREATE_COMPLETE** and its resource outputs. This confirms actual stack provisioning, beyond the previously inspected public endpoints. The owner also reported fresh-account registration, upload/extracted-value checks, Q&A and question history after refresh working in the browser. No source document, exact expected field values or rendered browser session were independently inspected for that report.
+
+Read-only owner-run service checks produced these mutually matching observations:
+
+- S3 bucket `prashn-cloud-v2-documents-rdt7uxzmmecc` contains original `originals/c7ac43ec-23bf-443f-9ed1-506ee65c378c` (**290,957 bytes**) and result `results/DOC-904e17f3-f3f7-46a6-b6f7-ee5c255d0d20/1-c9a2a174-7b53-4259-ab11-98b3a715ac26.json` (**8,541 bytes**): **two objects, 299,498 bytes**.
+- A consistent DynamoDB scan of `prashn-cloud-v2-Data-1A1BL8CP0EBBD`, filtered/projected to document metadata only, returned one document with `PK: DOC#DOC-904e17f3-f3f7-46a6-b6f7-ee5c255d0d20`, `status: Completed` and the exact S3 result key above. `Count: 1`, `ScannedCount: 18`; customer profiles/password hashes and question contents were not returned by that projection.
+- Application log group `/prashn/prashn-cloud-v2/application` contains `job_completed` for the same document, generation **1**, at **2026-10-10 00:15:07.167 UTC** (**05:45:07.167 IST**).
+- SQS CloudWatch sums over the owner's two-hour query window were **1 sent, 1 received and 1 deleted** for `prashn-cloud-v2-Jobs-IAwD9MmUQPJV`. These are operation counts, not a general exactly-once guarantee.
+- Both live ASGs had **minimum 1, desired 1, current 1, maximum 2**. The API group is `prashn-cloud-v2-ApiGroup-wNaD6zJovorZ`; the worker group is `prashn-cloud-v2-WorkerGroup-7tyvnqSr5bU0`.
+- Live API policy `prashn-cloud-v2-ApiRequestScaling-frosbI9Ofh37` is **TargetTrackingScaling**, **ALBRequestCountPerTarget**, target **100.0**. No activity demonstrating a policy-triggered capacity change has yet been supplied.
+- AWS Free Tier plan-state response: **FREE**, **ACTIVE**, remaining credits **139.61 USD**, expiration `2027-01-06T05:45:03.181000+00:00` (**6 January 2027, 11:15:03 IST**, fractional seconds omitted). This is an inspected API response, not an instant reconciliation of the final bill.
+
+The owner selected testing/demo-only uptime and an additional testing allowance of **$4 total before credits**. No live traffic generator had run at this checkpoint. Baseline hosting, the original EC2 server, the ALB and retained data resources remain separate ongoing costs; the allowance is a planning constraint, not an AWS hard cap.
+
+A reusable `infra/scaling_demo.py` now caps traffic at four health requests/second, 360 seconds, 1,440 load requests plus one preflight, and eight in-flight requests. It validates cloud health, avoids catch-up bursts, stops scheduling after repeated failures and makes no AWS capacity API calls. Existing scaling can add one API instance under the observed maximum of two. Three real loopback HTTP checks cover pacing/request limits, early stop on repeated 500 responses, and rejection of invalid targets/unbounded arguments before network requests. The first run exposed an unclosed HTTP error response; it was fixed by explicitly closing that response. Final `python -W error::ResourceWarning -m unittest discover -s infra/tests -v` passed **11/11** (three traffic checks plus eight handshake checks), no reported resource warnings, in **4.35 seconds**. Actual scale-out/scale-in, pause/resume persistence and billing impact remain pending. The bounded test and deliberate zero-capacity pause/resume instructions are in [the operating guide](aws-migration.md#bounded-api-scaling-demonstration).
 
 ## First CloudShell rollout attempt and portability correction
 
