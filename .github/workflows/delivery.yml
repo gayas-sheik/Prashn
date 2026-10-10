@@ -1,0 +1,113 @@
+name: Prashn approved delivery
+
+'on':
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type DEPLOY prashn-cloud-v2 to approve the demo release and pause afterward'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prashn-cloud-v2-delivery
+  cancel-in-progress: false
+
+jobs:
+  approval:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Require explicit manual approval on the trusted branch
+        env:
+          APPROVAL: ${{ inputs.confirmation }}
+          REF: ${{ github.ref }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          test "$EVENT" = workflow_dispatch
+          test "$REF" = refs/heads/aws-migration-preparation
+          test "$APPROVAL" = 'DEPLOY prashn-cloud-v2'
+  checked_release:
+    needs: approval
+    uses: ./.github/workflows/ci.yml
+    with:
+      package_release: true
+  delivery:
+    needs: [approval, checked_release]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 80
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: us-east-1
+      EXPECTED_ACCOUNT: '683146427271'
+      PRASHN_STACK: prashn-cloud-v2
+      EXPECTED_RELEASE: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: prashn-release-${{ github.sha }}
+          path: .aws-build/ci-release
+      - uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5
+        with:
+          role-to-assume: arn:aws:iam::683146427271:role/prashn-cloud-v2-github-release
+          role-session-name: prashn-release-${{ github.run_id }}
+          role-duration-seconds: 7200
+          aws-region: us-east-1
+          allowed-account-ids: '683146427271'
+          unset-current-credentials: true
+      - name: Deliver only the CI-tested code artifact
+        run: python3 infra/cd_release.py deploy --account "$EXPECTED_ACCOUNT" --revision "$EXPECTED_RELEASE"
+      - name: Verify new release and pause after acceptance
+        run: bash verify.sh --expected-release "$EXPECTED_RELEASE" --pause-after
+      - name: Retain sanitized delivery and acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: prashn-delivery-evidence-${{ github.run_id }}
+          path: |
+            .aws-build/cd/*.json
+            .aws-build/audit-*/report.json
+            .aws-build/audit-*/report.md
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 7
+  cleanup:
+    needs: [approval, delivery]
+    if: always() && needs.approval.result == 'success' && needs.delivery.result != 'skipped'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5
+        with:
+          role-to-assume: arn:aws:iam::683146427271:role/prashn-cloud-v2-github-release
+          role-session-name: prashn-cleanup-${{ github.run_id }}
+          role-duration-seconds: 3600
+          aws-region: us-east-1
+          allowed-account-ids: '683146427271'
+          unset-current-credentials: true
+      - name: Inspect final compute pause even after delivery failure
+        run: python3 infra/cd_release.py pause --account 683146427271
+      - name: Retain final pause evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: prashn-pause-evidence-${{ github.run_id }}
+          path: |
+            .aws-build/audit-*/report.json
+            .aws-build/audit-*/report.md
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 7

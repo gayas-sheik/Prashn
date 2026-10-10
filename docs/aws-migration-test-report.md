@@ -53,16 +53,52 @@ Infrastructure lint initially found a missing VPC-link name and an invalid IAM `
 
 | Requirement | Code/configuration | Executed evidence | Live AWS verification |
 | --- | --- | --- | --- |
-| S3 originals/results and private downloads | IMPLEMENTED | TESTED; emulator byte comparisons plus inspected v2 object listing and matching result reference | VERIFIED for original/result object presence for one completed document; private-download/deletion/fault cases pending |
-| DynamoDB accounts/documents/history/activity | IMPLEMENTED | TESTED; emulator cases plus strong scan of v2 completion metadata; owner reported login/history persistence | VERIFIED for the inspected document metadata/result reference; full identity/isolation/history/CRUD inspection pending |
-| SQS workers, retry, leases and recovery | IMPLEMENTED | TESTED; emulator cases plus live sent/received/deleted metrics and matching completion event | VERIFIED for the observed one-job happy path; failures/retry/duplicates/recovery pending |
-| Automatic API/worker scaling | IMPLEMENTED in template | TESTED by bounded live API traffic, inspected policy/ASG sizing and alarm-triggered launch activity | VERIFIED: API desired 1-to-2 with two InService/Healthy instances; supplied activity warmup pending; ALB readiness, worker scaling and automatic scale-in pending |
-| CloudWatch logs/metrics/alarms | IMPLEMENTED in bootstrap/template | TESTED by source/schema review and inspected owner-supplied application events and SQS metrics | VERIFIED for supplied v2 job-completion log and SQS metric delivery; agent metrics/alarms/bootstrap stream pending |
+| S3 originals/results and private downloads | IMPLEMENTED | TESTED; emulator cases and owner-run controlled live upload/download/deletion assertions | VERIFIED for tested originals/results, matching references, exact original bytes/SHA256, anonymous original rejection and cleanup; provider-fault cases pending |
+| DynamoDB accounts/documents/history/activity | IMPLEMENTED | TESTED; emulator cases and owner-run live auth/isolation/history/metadata/cleanup assertions | VERIFIED for two fresh accounts, scoped CRUD/history, four persisted messages, tested result references, counts/activity and deletion tombstones; old-data persistence across replacement/restore pending |
+| SQS workers, retry, leases and recovery | IMPLEMENTED | TESTED; emulator cases plus controlled live native/OCR processing, corrupt failure and retry | VERIFIED for exercised processing and successful/failed retry generations; duplicate/lease/outage/worker-interruption recovery remains emulator-tested only |
+| Automatic API/worker scaling | IMPLEMENTED in template | TESTED by bounded live API traffic, actual policy/ASG inspection and launch activity | VERIFIED: alarm-triggered API 1-to-2 launch now reports Successful; resumed API target healthy; original second-target health not separately captured; worker scaling and automatic scale-in pending |
+| CloudWatch logs/metrics/alarms | IMPLEMENTED in bootstrap/template | TESTED by schema/source review, inspected supplied job logs/SQS metrics and live-script matching completion assertions | VERIFIED for test-document original/retry completion events and earlier SQS metrics; all agent metrics/alarms/bootstrap streams pending |
 | Single-entry deployment | IMPLEMENTED | Shell/template/handshake checks passed; corrected retry printed website; independent HTTP checks and owner stack-state inspection passed | VERIFIED: v2 `CREATE_COMPLETE`, reachable release and frontend publication; individual signal events not collected; historical failures retained below |
 | Existing-data import | IMPLEMENTED | TESTED with private synthetic snapshot; repeat import/source-preservation inspected | BLOCKED; real production data not imported |
 | Rendered AWS UI and error states | Existing design retained; upload integration changed | Frontend compile/lint passed | BLOCKED pending deployed browser checks |
 
-These statuses do not upgrade the earlier local audit or owner-reported browser checks into independent cloud acceptance. Remaining limits and live acceptance steps are recorded in [the migration guide](aws-migration.md). **No complete AWS migration or production-readiness claim is made.**
+These statuses include inspected output of the owner-run reviewed verification script, distinct from direct audit-workstation HTTP observations and browser reports. They do not upgrade the earlier local audit or establish unexecuted cloud cases. **Core cloud acceptance: PASS WITH LIMITATIONS. CI/CD and broader production acceptance remain incomplete.**
+
+## Completed owner-run live acceptance - 10 October 2026
+
+The owner supplied console output for:
+
+```bash
+cd ~/Prashn-cloud
+git pull --ff-only
+EXPECTED_ACCOUNT=683146427271 PRASHN_STACK=prashn-cloud-v2 AWS_REGION=us-east-1 bash verify.sh --resume-for-test --pause-after
+```
+
+The initial invocation from `~` returned `bash: verify.sh: No such file or directory`, before any tests. Changing into the checkout resolved it; `git pull --ff-only` reported Already up to date. The corrected full run completed with **PASS WITH LIMITATIONS**, **41 VERIFIED entries**, **zero FAILED**, **zero BLOCKED**, and one grouped **NOT TESTED** scope entry. Entries include configuration and aggregate cleanup checks; this is not 41 separate independent application test cases.
+
+The script printed report directory `.aws-build/audit-20261010T162320Z-f7a06f/`, whose start marker is **16:23:20 UTC / 21:53:20 IST on 10 October 2026**. Finish time and elapsed duration were not supplied. Original `report.md`/`report.json` and raw HTTP bodies were not supplied; conclusions are based on inspected console output and the reviewed script's explicit assertions. The supplied output and a derived summary are preserved locally under ignored `.aws-build/live-acceptance-evidence/audit-20261010T162320Z-f7a06f/`. The audit workstation made no new AWS/website calls during this review.
+
+| Executed area | Inspected live-script result |
+| --- | --- |
+| Stack/resources/security configuration | Correct account, CREATE_COMPLETE, both private/encrypted S3 configurations/TLS policies, ACTIVE DynamoDB/indexes/PITR, encrypted SQS/matching DLQ, restricted workload ingress, IAM profiles/inline policy checks, IMDSv2/encrypted launch settings and disabled CloudFront API cache passed |
+| Previous automatic API scale-out | The previously recorded alarm-triggered launch of `i-0bde7c7feb6d72e06` now reports **Successful**, replacing its earlier warmup-pending observation; no new load test was run |
+| Bounded resume and current readiness | Both groups resumed to desired 1/max 2; API target `i-0ef733c7121c6fd7a` healthy; production health 200 with S3/DynamoDB/SQS and full release `4fa4879f5b545eb8e06418b8549704cd7f85282b` |
+| Frontend publication | HTML, referenced JS/CSS and SPA route over verified HTTPS passed; no rendered browser interaction test |
+| Two fresh accounts | Each registration 201, duplicate 409, incorrect password 401, login/me 200 and future issued-token expiry passed |
+| Protected routes and ownership | Missing/malformed/tampered token 401; user B details/download/question/history-clear/retry/delete 404, list/activity empty and user A record still accessible |
+| Upload validation | Unsupported MIME, traversal filename, oversized intent and zero-byte intent 400 passed |
+| Independent processing | Two overlapping native-PDF upload workflows retained separate IDs/originals/results and distinct source vendors/totals; source text/fields/pages/SHA256 and identical private originals matched |
+| Categories and OCR | Receipt, Form, Unknown, PNG, JPEG and image-only PDF fixtures passed source/field/page/reference/original-byte checks; reviewed assertions require OCR provenance for scanned fixtures |
+| Q&A/history | Selected-document amount/citations matched; absent passport fact refused; four history messages unchanged across reads and confirmed in DynamoDB; other document history empty |
+| Retry/failure | Valid owner retry completed in generation 2 with expected source values; corrupt PDF recorded Failed with reason, questions 409, then another Failed retry generation |
+| Lists/metrics/activity/logging | Nine test records matched list/counts; upload/retry activity matched; CloudWatch delivered the original and retry completion events for the test document |
+| Logout policy | Logout 200; request after discarding token 401; the retained JWT still worked as documented because server token revocation is absent |
+| Deletion/storage cleanup | All nine test documents inaccessible, originals/results/history removed, minimal tombstones/deletion activity retained |
+| Compute pause | Both stack groups inspected at **minimum/maximum/desired/current = 0**; API intentionally unavailable; ALB/storage/logs/original-server costs remain |
+
+The preflight plan snapshot reported **FREE**, remaining credits **139.05 USD**. It was collected before the functional tests, not a final test-cost measurement. Do not attribute the change from the earlier 139.61 estimate entirely to this run or claim a reconciled bill. Two generated accounts and minimal audit records remain under the documented policy.
+
+Still unexecuted in this live run: rendered browser/mobile/error states, worker scale-out, automatic scale-in, busy-worker interruption/DLQ redrive, real data import/backup restore, old-data persistence across pause/resume, a correctly signed expired-token test, runtime IAM denial tests and complete security/performance acceptance. CI/CD remains pending. Core deployment/functionality is verified within the executed scope; unrestricted production readiness is not declared.
 
 ## Current live document and cost observations
 
@@ -154,3 +190,10 @@ curl.exe -sS -i --max-time 20 -H 'Authorization: Bearer invalid-audit-token' htt
 TLS verification was enabled; no insecure option was used. Responses carried CloudFront headers and API Gateway request IDs on API responses. A web-reader tool could not access the URL; the actual curl requests above succeeded and supply the evidence. No authenticated user records were read, created or changed by these checks.
 
 These checks establish public reachability, published frontend HTML, the active release/modes and two unauthenticated rejection cases. They do not establish valid-login behavior, user isolation, actual S3/DynamoDB document operations, SQS processing, retry/deletion, new-stack log delivery, scaling or rendered UI. No AWS console credentials were used by the audit workstation; explicit `CREATE_COMPLETE` and accepted instance-ID signal events remain owner-side verification steps. Existing-data migration and deliberate cleanup of the original server/failed-stack retained resources remain outstanding. **Website deployment passed these initial checks; full cloud acceptance is not yet complete.**
+# CI/CD preparation — 2026-10-10
+
+GitHub CI run [38069908701](https://github.com/gayas-sheik/Prashn/actions/runs/38069908701) completed successfully for `95a95cfcacc289075033161443ff0c75246c4e36`: dependency/native checks, frontend build/lint, backend regressions, local AWS-emulator tests and infrastructure checks. Packaging was skipped on that initial ordinary push run. The revised CI also packages push/manual runs so artifact generation is exercised before any AWS delivery.
+
+Executed locally: `python -W error::ResourceWarning -m unittest discover -s infra/tests -v` — **41 passed**, 9.264 seconds. The new real-packager test initially failed because Windows manifest paths used backslashes; changed to POSIX paths and reran successfully. Delivery tests inspect revision/checksum/privacy guards, change-set resource/parameter bounds, stale completion observations, OIDC subject/boundary controls and cleanup waiting. Bash syntax, Python compilation, workflow YAML parsing and `git diff --check` passed. No AWS resources were created by these checks.
+
+Implemented manual code-only delivery, one-time OIDC/role/boundary setup, exact deployed-release acceptance checking and a separate cleanup job. **Live IAM setup, OIDC assumption, CloudFormation release through GitHub, and post-release pause remain unverified until a real delivery run completes.** Manual workflow activation also requires its file on default branch `main`. See [CI/CD setup and operations](ci-cd.md). Previous owner-run application acceptance remains separate evidence.

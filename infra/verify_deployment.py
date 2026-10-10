@@ -158,7 +158,7 @@ class Audit:
                       account=self.args.account, website=self.url, verdict=verdict(self.checks) if self.finished else 'IN PROGRESS',
                       httpRequests=self.http_count, awsCalls=self.aws_count, checks=self.checks,
                       testDocumentIds=list(self.documents),
-                      scope='Core cloud deployment acceptance; not complete production/security/browser certification')
+                      scope=getattr(self, 'scope', 'Core cloud deployment acceptance; not complete production/security/browser certification'))
         content = json.dumps(result, indent=2) + '\n'
         path = self.directory / 'report.json'
         path.write_text(content, encoding='utf-8')
@@ -290,6 +290,8 @@ class Audit:
         expected = dict(status='ok', environment='production', processingMode='sqs', storageMode='s3', databaseMode='dynamodb', qaMode='extractive')
         require(all(value.get(k) == v for k, v in expected.items()), 'Health does not report the complete production/cloud mode tuple')
         require(re.fullmatch('[a-f0-9]{40}', value.get('release', '')) is not None, 'Missing release identity')
+        if getattr(self.args, 'expected_release', None):
+            require(value['release'] == self.args.expected_release, 'Health reports a different release than the CI-tested commit')
         self.release = value['release']
         return 'HTTP 200; production + S3/DynamoDB/SQS; release ' + self.release
 
@@ -762,11 +764,14 @@ def main():
     parser.add_argument('--region', default='us-east-1')
     parser.add_argument('--pause-after', action='store_true', help='After tests/cleanup, pause both stack fleets only once API admission closes and queue drains')
     parser.add_argument('--resume-for-test', action='store_true', help='Explicitly resume paused stack fleets with desired 1/max 2; requires --pause-after')
+    parser.add_argument('--expected-release', help='Require health to match the full CI-tested Git revision')
     args = parser.parse_args()
     if not re.fullmatch(r'\d{12}', args.account) or not re.fullmatch(r'[a-z][a-z0-9-]{2,24}', args.stack) or not re.fullmatch(r'[a-z]{2}-[a-z]+-\d', args.region):
         parser.error('Use a 12-digit account, a 3-25-character lowercase stack name and a valid region')
     if args.resume_for_test and not args.pause_after:
         parser.error('--resume-for-test requires --pause-after under the demo-only cost policy')
+    if args.expected_release and not re.fullmatch('[a-f0-9]{40}', args.expected_release):
+        parser.error('--expected-release must be a full 40-character Git revision')
     audit = Audit(args)
     print('Bounded verification: no stack provisioning or load test. Explicit resume can launch fleet instances. Hold off on other uploads when using --pause-after.', flush=True)
     try:

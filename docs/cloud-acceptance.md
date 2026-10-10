@@ -1,6 +1,6 @@
 # One-command cloud deployment verification
 
-Prepared **10 October 2026 (Asia/Kolkata)** for the existing `prashn-cloud-v2` stack. The script is implemented and locally checked; its full live acceptance run is **not yet executed**. Previously supplied evidence already establishes stack publication, one completed S3/DynamoDB/SQS document, CloudWatch completion logging and policy-triggered API scale-out. See [the evidence report](aws-migration-test-report.md).
+Updated **10 October 2026 (Asia/Kolkata)** for `prashn-cloud-v2`. The owner-run live script completed with **PASS WITH LIMITATIONS**, 41 verified entries and zero failed/blocked. Controlled core workflows, cleanup and zero-capacity pause passed. Broader scope exclusions remain; CI/CD is pending. See [the executed evidence](aws-migration-test-report.md#completed-owner-run-live-acceptance---10-october-2026). The commands below are retained for future justified verification runs, not a request to repeat the successful run immediately.
 
 ## Run in IAM CloudShell
 

@@ -38,3 +38,6 @@ backend/data/development/*.db
 __pycache__/
 *.db-shm
 *.db-wal
+
+# Local project handbook and its exports; keep outside repository history.
+/docs/private-handbook/
