@@ -73,7 +73,7 @@ The minimum fleet runs **two new instances**, an ALB, two 20 GiB gp3 disks and t
 
 This exceeds the current $10 monthly alert amount if run continuously. Alerts are not a cap; eligible usage consumes credits. The script does not upgrade the account plan. Free-plan access or service quotas may still block resource creation.
 
-The owner subsequently selected **testing/demo-only uptime** and a **$4 total additional testing allowance before credits**. A read-only Free Tier API response reports an active **FREE** plan with **$139.61** remaining credits and plan expiration **6 January 2027**; this is an observed response, not a real-time bill or a guarantee that every charge is eligible. Credits/billing estimates can lag actual usage. Keep this allowance separate from ongoing baseline hosting and the original server. No live traffic test had started when this limit was agreed.
+The owner selected **testing/demo-only uptime** and initially a $4 additional testing allowance, then increased it to **$10 total additional testing spend before credits**. The traffic limits and observed maximum of two instances per group are unchanged. A read-only Free Tier API response reported an active **FREE** plan with **$139.61** remaining credits and plan expiration **6 January 2027**; this is a historical observed response, not a real-time bill or a guarantee that every charge is eligible. Credits/billing estimates can lag actual usage. Keep this allowance separate from ongoing baseline hosting and the original server. No live traffic-test result has been supplied at this checkpoint.
 
 Check plan state without provisioning:
 
@@ -175,7 +175,7 @@ set -o pipefail
 python3 infra/scaling_demo.py --url https://d1ew9wh9ondbo.cloudfront.net --seconds 360 --rate 4 2>&1 | tee "$HOME/prashn-api-scaling-demo.log"
 ```
 
-The tool sends one cloud-health preflight and at most **1,440 load requests**, capped at four/second and eight in-flight. It avoids catch-up bursts, has request timeouts and stops scheduling after five failed requests. Already in-flight requests finish. It has no AWS credentials or capacity-changing calls. Existing policies may launch one additional API instance under the inspected maximum; the worker receives no test jobs. This test can consume credits and is subject to the agreed $4 additional allowance. Duration/rate are enforced by the script, not by billing. No live scaling result is claimed until activities and instance counts are inspected.
+The tool sends one cloud-health preflight and at most **1,440 load requests**, capped at four/second and eight in-flight. It avoids catch-up bursts, has request timeouts and stops scheduling after five failed requests. Already in-flight requests finish. It has no AWS credentials or capacity-changing calls. Existing policies may launch one additional API instance under the inspected maximum; the worker receives no test jobs. This test can consume credits and is subject to the agreed $10 additional allowance. Duration/rate are enforced by the script, not by billing. No live scaling result is claimed until activities and instance counts are inspected.
 
 After traffic finishes, inspect the API group and its recent activities:
 
