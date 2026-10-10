@@ -1,6 +1,6 @@
 # Prashn AWS migration and deployment
 
-Prepared on **10 October 2026 (Asia/Kolkata)**. The corrected owner-run `prashn-cloud-v2` deployment reached website publication at **https://d1ew9wh9ondbo.cloudfront.net/**. Independent HTTPS checks returned frontend HTML and healthy cloud-mode API responses for release **`4fa4879`**, plus 401 rejection of missing/malformed document tokens. **Live document workflows, scaling, new-stack log delivery and existing-data migration still require acceptance checks.** The earlier `prashn-cloud` attempt rolled back; see [the rollout evidence](aws-migration-test-report.md#corrected-v2-publication-and-independent-public-checks). The original [EC2 installation](ec2-deployment.md) was not modified by this rollout.
+Prepared on **10 October 2026 (Asia/Kolkata)**. The corrected `prashn-cloud-v2` deployment is published at **https://d1ew9wh9ondbo.cloudfront.net/**. Independent HTTPS checks passed for frontend/health and missing/malformed token rejection. Owner-supplied AWS evidence verifies one matching S3/DynamoDB/SQS completion, its CloudWatch log and actual policy-triggered API scale-out from one to two instances. Final scale-out warmup/ALB readiness and broader acceptance remain pending. Use [the one-command verification guide](cloud-acceptance.md) to execute the remaining core checks and pause compute afterward. The earlier failed rollout and original [EC2 installation](ec2-deployment.md) remain documented.
 
 ## Architecture supplied by this change
 
@@ -63,7 +63,7 @@ Use the complete `local/local/local` mode tuple or `s3/dynamodb/sqs`. Partial mi
 
 ## Scaling and account checks
 
-Each group starts with one t3.small instance and permits two by default. API target tracking uses **100 ALB requests/minute per target**. Workers add capacity after at least three visible jobs persist for two minutes, and reduce capacity after the queue has no visible or in-flight jobs for ten minutes. Warmup is 300 seconds. Actual demand, provisioning latency and provider metrics determine when these policies act; scaling has not been demonstrated live.
+Each group starts with one t3.small instance and permits two by default. API target tracking uses **100 ALB requests/minute per target**. Workers add capacity after at least three visible jobs persist for two minutes, and reduce capacity after the queue has no visible or in-flight jobs for ten minutes. Warmup is 300 seconds. Actual policy-triggered API scale-out from one to two has been observed; the supplied activity still showed warmup pending. Worker scaling and automatic scale-in have not been demonstrated live.
 
 The owner supplied read-only `us-east-1` results: load balancers `0`, HTTP APIs `0`, and Standard On-Demand EC2 quota **16 vCPUs**. The planned default maximum needs eight new vCPUs plus the known existing two. These checks show listing access and quota headroom, not permission to create every resource on the personal Free plan. Deployment preflight repeats the checks and counts currently running instances.
 
@@ -73,7 +73,7 @@ The minimum fleet runs **two new instances**, an ALB, two 20 GiB gp3 disks and t
 
 This exceeds the current $10 monthly alert amount if run continuously. Alerts are not a cap; eligible usage consumes credits. The script does not upgrade the account plan. Free-plan access or service quotas may still block resource creation.
 
-The owner selected **testing/demo-only uptime** and initially a $4 additional testing allowance, then increased it to **$10 total additional testing spend before credits**. The traffic limits and observed maximum of two instances per group are unchanged. A read-only Free Tier API response reported an active **FREE** plan with **$139.61** remaining credits and plan expiration **6 January 2027**; this is a historical observed response, not a real-time bill or a guarantee that every charge is eligible. Credits/billing estimates can lag actual usage. Keep this allowance separate from ongoing baseline hosting and the original server. No live traffic-test result has been supplied at this checkpoint.
+The owner selected **testing/demo-only uptime** and initially a $4 additional testing allowance, then increased it to **$10 total additional testing spend before credits**. The traffic limits and observed maximum of two instances per group are unchanged. A read-only Free Tier API response reported an active **FREE** plan with **$139.61** remaining credits and plan expiration **6 January 2027**; this is a historical observed response, not a real-time bill or a guarantee that every charge is eligible. Credits/billing estimates can lag actual usage. Keep this allowance separate from ongoing baseline hosting and the original server. The bounded API demonstration subsequently passed 1,439 requests and triggered scale-out; its actual billing impact remains unmeasured.
 
 Check plan state without provisioning:
 
@@ -260,4 +260,4 @@ See [the preparation verification report](aws-migration-test-report.md) for exec
 - Do not stop individual ASG instances as a cost-control method: the group can replace them. For a temporary pause, deliberately set group minimum/maximum/desired capacity to zero; ALB and retained storage still incur charges. Review a deliberate stack teardown separately from data deletion.
 - Development/build dependency advisories remain. Password recovery, token revocation, per-user/IP abuse controls, a complete production security review and CI/CD are not included. API Gateway's configured throttling is a service-level control.
 
-**Current verdict: website publication and public health/auth rejection checks passed for the corrected cloud release. Full cloud acceptance, scaling, new-stack logging, browser workflows and production data migration remain unfinished.**
+**Current verdict: cloud publication, public health/auth rejection, one document's storage/queue/completion log and actual API scale-out have supporting evidence. Broader cloud acceptance remains incomplete. The single verification script is locally checked; its live run and final report are pending.**

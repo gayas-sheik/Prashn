@@ -36,6 +36,7 @@ An ID image or PDF can undergo the same text extraction and supported field matc
 - [Optional AWS deployment](docs/aws-architecture.md): hosting choices and a proposed managed-service migration, with prerequisites and implementation gaps clearly identified.
 - [EC2 deployment record](docs/ec2-deployment.md): current HTTPS hosting, inspected command results, owner-reported browser checks, operations and remaining migration work.
 - [AWS migration and automation](docs/aws-migration.md): implemented cloud adapters, durable workers, deployment script, cost review and live rollout checklist.
+- [One-command cloud verification](docs/cloud-acceptance.md): bounded deployment checks, test-document cleanup, explicit demo resume/pause and an evidence-based verdict.
 - [Evaluation and browser verification](docs/synthetic-evaluation-report.md): before/after measurements, tested browser flows and verification limits.
 - [Earlier validation history](docs/local-mvp-test-report.md): repair history and regression coverage.
 - [Final local MVP audit](docs/local-mvp-final-audit.md): independent acceptance evidence, repairs, remaining limitations and migration readiness.
