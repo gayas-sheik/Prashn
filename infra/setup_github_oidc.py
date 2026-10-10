@@ -100,9 +100,16 @@ def deployment_policy(b):
     add(['dynamodb:DescribeTable', 'dynamodb:DescribeContinuousBackups'], table)
     add(['dynamodb:GetItem', 'dynamodb:Query'], table, {'ForAllValues:StringLike': {'dynamodb:LeadingKeys': ['DOC#*']}})
     add(['sqs:GetQueueAttributes'], b['queueArns'])
+    # CloudFormation reads unchanged GetAtt dependencies when updating roles.
+    # DescribeLogGroups cannot be scoped to one log-group ARN; restrict region.
+    # Log contents remain readable only from the existing application group.
+    add(['logs:DescribeLogGroups'], '*', {'StringEquals': {'aws:RequestedRegion': region}})
     add(['logs:FilterLogEvents'], [b['logArn'], b['logArn'] + ':*'])
-    add(['elasticloadbalancing:DescribeTargetHealth'], '*', {'StringEquals': {'aws:RequestedRegion': region}})
-    add(['cloudfront:GetDistributionConfig', 'cloudfront:CreateInvalidation', 'cloudfront:GetInvalidation'], b['distributionArn'])
+    # The scaling policy references full names of the existing ALB/target group;
+    # stack outputs reference the existing distribution's DomainName.
+    add(['elasticloadbalancing:DescribeTargetHealth', 'elasticloadbalancing:DescribeLoadBalancers',
+         'elasticloadbalancing:DescribeTargetGroups'], '*', {'StringEquals': {'aws:RequestedRegion': region}})
+    add(['cloudfront:GetDistribution', 'cloudfront:GetDistributionConfig', 'cloudfront:CreateInvalidation', 'cloudfront:GetInvalidation'], b['distributionArn'])
     # CloudFormation resolves only this existing public AMI parameter. It gets
     # no permission to read the private JWT parameter.
     add(['ssm:GetParameters'], f'arn:aws:ssm:{region}:*:parameter' + b['amiParameter'])

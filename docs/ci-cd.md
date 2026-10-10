@@ -10,12 +10,14 @@ This is continuous integration with manually approved continuous delivery. It is
 | --- | --- |
 | Automatic CI | GitHub run [38072471640](https://github.com/gayas-sheik/Prashn/actions/runs/38072471640) passed for implementation commit `ba092929e5468897e769d3ba499fe9a5c57d5d76`, including frontend build/lint, backend regressions, local AWS-emulator checks, infrastructure checks, release packaging and artifact upload. The earlier run `38069908701` also passed, with packaging skipped before the push-packaging condition was added. |
 | Artifact and release guards | Implemented; local tests cover archive privacy, checksum/revision verification, real shell packaging, release-only change sets, immutable OIDC trust and safe cleanup controls. These are not live AWS deployment tests. |
-| GitHub delivery workflow | Active. [Run #4](https://github.com/gayas-sheik/Prashn/actions/runs/38079631231) passed CI, authentication and the corrected guard, then executed the change set. CloudFormation rejected validation because the deployment role lacked `ec2:DescribeSubnets`; owner-supplied events show completed rollback before application resources updated. Cleanup inspected both fleets at zero. The new read-permission/retry fix requires another IAM refresh; successful delivery remains pending. |
+| GitHub delivery workflow | Active. [Run #5](https://github.com/gayas-sheik/Prashn/actions/runs/38081918138), source `72592cf`, passed CI, authentication and the corrected guard. CloudFormation rolled back after both workload roles failed to resolve the existing log-group ARN: missing `logs:DescribeLogGroups`. Downloaded cleanup evidence inspected both fleets at zero. The dependency-read fix requires another IAM refresh; successful delivery remains pending. |
 | AWS application | The earlier owner-run cloud acceptance passed with limitations and inspected both fleets at zero afterward. That evidence predates CI/CD and does not prove this workflow has deployed anything. |
 
 ## One-time setup in prashn-admin CloudShell
 
 Use the IAM account, not root. Keep uploads stopped during setup and delivery. The original standalone Prashn-Server is separate and is not modified by this workflow.
+
+After a deployment-policy correction, rerun the setup helper below to refresh the existing role before starting a **new** delivery run. Re-running an old GitHub run uses its old source revision. The log-group metadata read is restricted to `us-east-1`; AWS requires `Resource: "*"` for DescribeLogGroups, while log-content reads stay scoped to the application group. Existing ALB/target-group metadata reads are also region-restricted; GetDistribution is scoped to the existing distribution. These dependency reads grant no new infrastructure write actions.
 
 Update the cloud checkout:
 

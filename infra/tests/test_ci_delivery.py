@@ -164,6 +164,18 @@ class DeliveryTests(unittest.TestCase):
         self.assertTrue({'ec2:DescribeSubnets','ec2:DescribeVpcs','ec2:DescribeImages','ec2:DescribeAvailabilityZones'}.issubset(network['Action']))
         self.assertEqual(network['Condition']['StringEquals']['aws:RequestedRegion'],'us-east-1')
         self.assertNotIn('ec2:CreateSubnet',actions)
+        metadata = next(s for s in grants if 'logs:DescribeLogGroups' in s['Action'])
+        self.assertEqual(metadata['Resource'],'*')
+        self.assertEqual(metadata['Condition']['StringEquals']['aws:RequestedRegion'],'us-east-1')
+        contents = next(s for s in grants if 'logs:FilterLogEvents' in s['Action'])
+        self.assertEqual(contents['Resource'],['logs','logs:*'])
+        self.assertNotIn('logs:GetLogEvents',actions)
+        self.assertNotIn('logs:CreateLogGroup',actions)
+        load_balancer = next(s for s in grants if 'elasticloadbalancing:DescribeLoadBalancers' in s['Action'])
+        self.assertIn('elasticloadbalancing:DescribeTargetGroups',load_balancer['Action'])
+        self.assertEqual(load_balancer['Condition']['StringEquals']['aws:RequestedRegion'],'us-east-1')
+        distribution = next(s for s in grants if 'cloudfront:GetDistribution' in s['Action'])
+        self.assertEqual(distribution['Resource'],'distribution')
 
     def observed_change(self):
         fixture = json.loads((Path(__file__).parent/'fixtures/observed-release-dependencies.json').read_text())
@@ -285,6 +297,19 @@ class DeliveryTests(unittest.TestCase):
         self.assertNotIn('fixture-private-secret',text)
         self.assertNotIn('fixture-secret-url',text)
         self.assertEqual(len(result['events']),2)
+
+    def test_failure_detail_prefers_current_resource_denial_over_generic_or_old_summary(self):
+        events = [
+            {'ResourceStatus':'UPDATE_ROLLBACK_IN_PROGRESS','ResourceStatusReason':'Resources failed: ApiRole, WorkerRole','LogicalResourceId':'stack'},
+            {'ResourceStatus':'UPDATE_FAILED','ResourceStatusReason':"Access denied for operation 'logs:DescribeLogGroups'",'LogicalResourceId':'ApiRole'},
+            {'ResourceStatus':'UPDATE_ROLLBACK_IN_PROGRESS','ResourceStatusReason':'Old subnet denial','LogicalResourceId':'stack'},
+            {'ResourceStatus':'UPDATE_FAILED','ResourceStatusReason':'Old unrelated failure','LogicalResourceId':'WorkerRole'}]
+        stack = {'StackStatus':'UPDATE_ROLLBACK_COMPLETE'}
+        failure = delivery.stack_failure_summary(stack,events)
+        self.assertEqual(delivery.stack_failure_detail(failure),"ApiRole: Access denied for operation 'logs:DescribeLogGroups'")
+        failure = delivery.stack_failure_summary(stack,[events[0],*events[2:]])
+        self.assertEqual(delivery.stack_failure_detail(failure),'Resources failed: ApiRole, WorkerRole')
+        self.assertIn('Inspect stack-failure.json',delivery.stack_failure_detail(delivery.stack_failure_summary(stack,[])))
 
 
 if __name__ == '__main__': unittest.main()

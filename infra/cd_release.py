@@ -170,6 +170,22 @@ def stack_failure_summary(stack, events):
             'scope': 'Failed stack operation only; not application acceptance', 'events': rows}
 
 
+def stack_failure_detail(failure):
+    # Events are newest first. Stop at the current operation's summary rather
+    # than displaying an older failed operation if validation failed at stack
+    # level. Prefer the concrete resource failure beneath that summary.
+    events = failure['events']
+    current = []
+    for event in events:
+        if event['status'] == 'UPDATE_ROLLBACK_IN_PROGRESS' and current:
+            break
+        current.append(event)
+    specific = next((e for e in current if e['status'].endswith('_FAILED')), None)
+    if specific:
+        return specific['resource'] + ': ' + specific['reason']
+    return current[0]['reason'] if current else (failure['reason'] or 'Inspect stack-failure.json and CloudFormation events')
+
+
 class Delivery(Audit):
     def __init__(self, args):
         super().__init__(SimpleNamespace(account=args.account, stack=args.stack, region=args.region,
@@ -255,7 +271,7 @@ class Delivery(Audit):
             failure = stack_failure_summary(complete, self.aws('cloudformation', 'describe-stack-events',
                         '--stack-name', self.args.stack, '--no-paginate')['StackEvents'])
             (folder_out / 'stack-failure.json').write_text(json.dumps(failure, indent=2))
-            detail = failure['events'][0]['reason'] if failure['events'] else 'Inspect stack-failure.json and CloudFormation events'
+            detail = stack_failure_detail(failure)
             raise AssertionError('Release ended in ' + complete['StackStatus'] + ': ' + detail)
         rows = self.aws('cloudformation', 'describe-stack-resources', '--stack-name', self.args.stack)['StackResources']
         current = {row['LogicalResourceId']: row['PhysicalResourceId'] for row in rows}
