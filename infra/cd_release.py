@@ -153,6 +153,23 @@ def proposed_change_summary(change, revision, id_):
     return {'revision': revision, 'changeSet': id_, 'scope': 'Proposed changes only; execution not asserted', 'changes': changes}
 
 
+def stack_failure_summary(stack, events):
+    """Retain status/reasons, excluding parameters and resource properties."""
+    def reason(value):
+        text = re.sub(r'https?://\S+', '[URL omitted]', str(value or ''))
+        text = re.sub(r'\b(?:AKIA|ASIA)[A-Z0-9]{16}\b', '[key ID omitted]', text)
+        text = re.sub(r'\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b', '[token omitted]', text)
+        return text[:1200]
+    rows = []
+    for event in events[:25]:
+        status = event.get('ResourceStatus', '')
+        if event.get('ResourceStatusReason') and (status.endswith('_FAILED') or 'ROLLBACK' in status):
+            rows.append({'time': event.get('Timestamp'), 'resource': event.get('LogicalResourceId'),
+                         'status': status, 'reason': reason(event['ResourceStatusReason'])})
+    return {'status': stack['StackStatus'], 'reason': reason(stack.get('StackStatusReason')),
+            'scope': 'Failed stack operation only; not application acceptance', 'events': rows}
+
+
 class Delivery(Audit):
     def __init__(self, args):
         super().__init__(SimpleNamespace(account=args.account, stack=args.stack, region=args.region,
@@ -164,24 +181,32 @@ class Delivery(Audit):
     def stack(self):
         return self.aws('cloudformation', 'describe-stacks', '--stack-name', self.args.stack)['Stacks'][0]
 
-    def wait_stack(self, seconds, expected_digest=None):
+    def wait_stack(self, seconds, expected_digest=None, previous_updated=None):
         end = min(self.deadline, time.monotonic() + seconds)
+        observed_update = False
         while time.monotonic() < end:
             stack = self.stack()
-            if not stack['StackStatus'].endswith('_IN_PROGRESS'):
+            if stack['StackStatus'].endswith('_IN_PROGRESS'):
+                observed_update = True
+            else:
                 parameters = {p['ParameterKey']: p['ParameterValue'] for p in stack.get('Parameters', [])}
-                # ExecuteChangeSet is asynchronous. A stale UPDATE_COMPLETE
-                # observation of the previous release is not completion.
-                if expected_digest is None or stack['StackStatus'] != 'UPDATE_COMPLETE' or parameters.get('ArtifactDigest') == expected_digest:
-                    if expected_digest is None or stack['StackStatus'] != 'CREATE_COMPLETE':
-                        return stack
+                if expected_digest is None:
+                    return stack
+                if stack['StackStatus'] == 'UPDATE_COMPLETE' and parameters.get('ArtifactDigest') == expected_digest:
+                    return stack
+                # A retry can start from rollback-complete. Ignore that stale
+                # terminal state until this operation starts or its timestamp
+                # advances; promptly return an actual completed rollback.
+                timestamp_changed = previous_updated is not None and stack.get('LastUpdatedTime') is not None and stack['LastUpdatedTime'] != previous_updated
+                if stack['StackStatus'] not in ('CREATE_COMPLETE', 'UPDATE_COMPLETE') and (observed_update or timestamp_changed):
+                    return stack
             print('CloudFormation:', stack['StackStatus'], flush=True)
             time.sleep(30)
         raise Blocked('Stack operation still in progress; do not pause or start a second release until it finishes')
 
     def deploy(self, folder, revision):
         manifest = validate_package(folder, revision)
-        self.preflight()
+        self.preflight(allow_rollback_complete=True)
         self.credits()
         stack = self.stack()
         require(not stack.get('RoleARN'), 'Existing stack uses a service role; review its deployment permissions before delivery')
@@ -224,8 +249,14 @@ class Delivery(Audit):
             raise
         self.resume_for_test()
         self.aws('cloudformation', 'execute-change-set', '--change-set-name', id_, '--stack-name', self.args.stack)
-        complete = self.wait_stack(2700, expected_digest=digest)
-        require(complete['StackStatus'] == 'UPDATE_COMPLETE', 'Release did not reach UPDATE_COMPLETE; inspect stack events')
+        complete = self.wait_stack(2700, expected_digest=digest,
+                                   previous_updated=stack.get('LastUpdatedTime', stack.get('CreationTime')))
+        if complete['StackStatus'] != 'UPDATE_COMPLETE':
+            failure = stack_failure_summary(complete, self.aws('cloudformation', 'describe-stack-events',
+                        '--stack-name', self.args.stack, '--no-paginate')['StackEvents'])
+            (folder_out / 'stack-failure.json').write_text(json.dumps(failure, indent=2))
+            detail = failure['events'][0]['reason'] if failure['events'] else 'Inspect stack-failure.json and CloudFormation events'
+            raise AssertionError('Release ended in ' + complete['StackStatus'] + ': ' + detail)
         rows = self.aws('cloudformation', 'describe-stack-resources', '--stack-name', self.args.stack)['StackResources']
         current = {row['LogicalResourceId']: row['PhysicalResourceId'] for row in rows}
         require(all(current.get(key) == self.resources[key] for key in ('ApiGroup', 'WorkerGroup', 'ApiLaunch', 'WorkerLaunch', 'ApiRole', 'WorkerRole')),

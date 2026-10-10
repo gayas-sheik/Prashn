@@ -50,6 +50,25 @@ class VerificationTests(unittest.TestCase):
         self.assertEqual(verify.verdict(audit.checks), 'FAIL')
         self.assertFalse(audit.ready)
 
+    def test_completed_rollback_requires_explicit_retry_scope_and_valid_bindings(self):
+        audit=self.make_audit()
+        stack={'StackStatus':'UPDATE_ROLLBACK_COMPLETE','Outputs':[{'OutputKey':k,'OutputValue':v} for k,v in
+               {'WebsiteUrl':'https://fixture.cloudfront.net','ApiGroup':'api','WorkerGroup':'worker'}.items()]}
+        resources={'StackResources':[{'LogicalResourceId':k,'PhysicalResourceId':v} for k,v in {'ApiGroup':'api','WorkerGroup':'worker'}.items()]}
+        def aws(service,operation,*_args,**_kwargs):
+            if operation=='get-caller-identity':return {'Account':audit.args.account,'Arn':'arn:aws:iam::'+audit.args.account+':user/fixture'}
+            if operation=='describe-stacks':return {'Stacks':[stack]}
+            if operation=='describe-stack-resources':return resources
+            self.fail('Unexpected AWS operation')
+        audit.aws=aws
+        with self.assertRaises(AssertionError):audit.preflight()
+        audit.preflight(allow_rollback_complete=True)
+        self.assertTrue(audit.ready)
+        for status in ('UPDATE_ROLLBACK_IN_PROGRESS','UPDATE_ROLLBACK_FAILED','DELETE_COMPLETE','CREATE_FAILED'):
+            stack['StackStatus']=status
+            with self.subTest(status=status),self.assertRaises(AssertionError):audit.preflight(allow_rollback_complete=True)
+            self.assertFalse(audit.ready)
+
     def test_transport_failure_report_does_not_leak_signed_url_or_tokens(self):
         audit = self.make_audit()
         audit.tokens['A'] = 'private-test-token'

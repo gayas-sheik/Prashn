@@ -160,6 +160,10 @@ class DeliveryTests(unittest.TestCase):
         passed = next(s for s in grants if 'iam:PassRole' in s['Action'])
         self.assertEqual(passed['Resource'],['role'])
         self.assertEqual(passed['Condition']['StringEquals']['iam:PassedToService'],['ec2.amazonaws.com','autoscaling.amazonaws.com'])
+        network = next(s for s in grants if 'ec2:DescribeSubnets' in s['Action'])
+        self.assertTrue({'ec2:DescribeSubnets','ec2:DescribeVpcs','ec2:DescribeImages','ec2:DescribeAvailabilityZones'}.issubset(network['Action']))
+        self.assertEqual(network['Condition']['StringEquals']['aws:RequestedRegion'],'us-east-1')
+        self.assertNotIn('ec2:CreateSubnet',actions)
 
     def observed_change(self):
         fixture = json.loads((Path(__file__).parent/'fixtures/observed-release-dependencies.json').read_text())
@@ -258,6 +262,29 @@ class DeliveryTests(unittest.TestCase):
         with patch.object(audit,'wait_stack',side_effect=delivery.Blocked('Still updating')), patch.object(audit,'pause') as pause:
             with self.assertRaises(delivery.Blocked):audit.safe_pause()
             pause.assert_not_called()
+
+    def test_rollback_retry_ignores_old_terminal_state_and_returns_new_failure(self):
+        audit=delivery.Delivery(SimpleNamespace(account='683146427271',stack='prashn-cloud-v2',region='us-east-1',command='deploy'))
+        audit.directory=self.folder
+        old={'StackStatus':'UPDATE_ROLLBACK_COMPLETE','LastUpdatedTime':'old'}
+        failed={'StackStatus':'UPDATE_ROLLBACK_COMPLETE','LastUpdatedTime':'new'}
+        for sequence in ([old,{'StackStatus':'UPDATE_IN_PROGRESS'},failed],[old,failed]):
+            with patch.object(audit,'stack',side_effect=sequence) as states,patch.object(delivery.time,'sleep'):
+                self.assertEqual(audit.wait_stack(60,expected_digest='new',previous_updated='old'),failed)
+            self.assertEqual(states.call_count,len(sequence))
+
+    def test_failure_snapshot_includes_stack_level_denial_without_private_properties(self):
+        stack={'StackStatus':'UPDATE_ROLLBACK_COMPLETE','Parameters':[{'ParameterValue':'fixture-private-secret'}]}
+        events=[{'ResourceStatus':'UPDATE_ROLLBACK_IN_PROGRESS','ResourceStatusReason':"AccessDenied. User doesn't have permission to call ec2:DescribeSubnets",
+                 'LogicalResourceId':'prashn-cloud-v2','Timestamp':'fixture-time','ResourceProperties':'fixture-private-secret'},
+                {'ResourceStatus':'UPDATE_FAILED','ResourceStatusReason':'https://private.example/?X-Amz-Signature=fixture-secret-url',
+                 'LogicalResourceId':'ApiRole','ResourceProperties':'fixture-private-secret'}]
+        result=delivery.stack_failure_summary(stack,events)
+        text=json.dumps(result)
+        self.assertIn('ec2:DescribeSubnets',text)
+        self.assertNotIn('fixture-private-secret',text)
+        self.assertNotIn('fixture-secret-url',text)
+        self.assertEqual(len(result['events']),2)
 
 
 if __name__ == '__main__': unittest.main()

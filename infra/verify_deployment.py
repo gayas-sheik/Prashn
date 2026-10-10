@@ -229,12 +229,16 @@ class Audit:
         require(code == expected, f'{kwargs.get("method", "GET")} {route}: expected HTTP {expected}, got {code}')
         return value
 
-    def preflight(self):
+    def preflight(self, *, allow_rollback_complete=False):
+        self.ready = False
         identity = self.aws('sts', 'get-caller-identity')
         require(identity['Account'] == self.args.account, 'Wrong AWS account; no workload operations authorized')
         require(not identity['Arn'].endswith(':root'), 'Use the prashn-admin IAM session, not root')
         stack = self.aws('cloudformation', 'describe-stacks', '--stack-name', self.args.stack)['Stacks'][0]
-        require(stack['StackStatus'] in ('CREATE_COMPLETE', 'UPDATE_COMPLETE'), 'Stack is not complete')
+        allowed = {'CREATE_COMPLETE', 'UPDATE_COMPLETE'}
+        if allow_rollback_complete:
+            allowed.add('UPDATE_ROLLBACK_COMPLETE')
+        require(stack['StackStatus'] in allowed, 'Stack is not complete')
         self.outputs = {o['OutputKey']: o['OutputValue'] for o in stack['Outputs']}
         self.url = self.outputs['WebsiteUrl'].rstrip('/')
         parsed = urlsplit(self.url)

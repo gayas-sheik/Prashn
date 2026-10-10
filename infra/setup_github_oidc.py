@@ -76,6 +76,7 @@ def deployment_policy(b):
          'cloudformation:DescribeStackEvents', 'cloudformation:GetTemplate', 'cloudformation:CreateChangeSet',
          'cloudformation:DescribeChangeSet', 'cloudformation:ExecuteChangeSet', 'cloudformation:DeleteChangeSet'], [b['stackArn'], cfn])
     add(['ec2:DescribeInstances', 'ec2:DescribeSecurityGroups', 'ec2:DescribeLaunchTemplates', 'ec2:DescribeLaunchTemplateVersions',
+         'ec2:DescribeSubnets', 'ec2:DescribeVpcs', 'ec2:DescribeImages', 'ec2:DescribeAvailabilityZones',
          'autoscaling:DescribeAutoScalingGroups', 'autoscaling:DescribePolicies', 'autoscaling:DescribeScalingActivities',
          'autoscaling:DescribeScalingProcessTypes'], '*', {'StringEquals': {'aws:RequestedRegion': region}})
     add(['ec2:CreateLaunchTemplateVersion', 'ec2:DeleteLaunchTemplateVersions', 'ec2:ModifyLaunchTemplate'], b['launchArns'])
@@ -118,7 +119,7 @@ class Setup(Audit):
         self.folder.mkdir(parents=True, exist_ok=True)
 
     def plan(self):
-        self.preflight()
+        self.preflight(allow_rollback_complete=True)
         stack = self.aws('cloudformation', 'describe-stacks', '--stack-name', self.args.stack)['Stacks'][0]
         require(not stack.get('RoleARN'), 'Service-role stacks need separate reviewed setup')
         p = {v['ParameterKey']: v['ParameterValue'] for v in stack['Parameters']}
