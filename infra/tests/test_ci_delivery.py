@@ -98,6 +98,20 @@ class DeliveryTests(unittest.TestCase):
         change['Parameters'][1]['ResolvedValue'] = 'ami-new'
         with self.assertRaises(AssertionError):delivery.validate_change_set(change,params)
 
+    def test_rejected_change_identifies_resource_and_summary_excludes_sensitive_properties(self):
+        change, params = self.change()
+        resource = change['Changes'][0]['ResourceChange']
+        resource.update(LogicalResourceId='ApiProfile',ResourceType='AWS::IAM::InstanceProfile',BeforeContext='fixture-private-token')
+        resource['Details'] = [{'Target':{'Attribute':'Properties','Name':'Roles','RequiresRecreation':'Never'},
+                               'Evaluation':'Dynamic','ChangeSource':'ResourceReference','CausingEntity':'ApiRole',
+                               'BeforeValue':'fixture-private-token','AfterValue':'fixture-private-token'}]
+        with self.assertRaisesRegex(AssertionError, r'ApiProfile.*AWS::IAM::InstanceProfile.*action=Modify.*replacement=False'):
+            delivery.validate_change_set(change,params)
+        summary = delivery.proposed_change_summary(change,self.sha,'fixture-change-set')
+        self.assertNotIn('fixture-private-token',json.dumps(summary))
+        self.assertEqual(summary['changes'][0]['details'][0]['CausingEntity'],'ApiRole')
+        self.assertIn('execution not asserted',summary['scope'])
+
     def test_fleet_parameter_change_is_refused(self):
         change, params = self.change()
         change['Parameters'][0]['ParameterValue'] = '4'

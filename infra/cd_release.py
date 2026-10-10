@@ -78,7 +78,9 @@ def validate_change_set(change, previous):
         r = entry['ResourceChange']
         require(r['LogicalResourceId'] in allowed and r['ResourceType'] == allowed[r['LogicalResourceId']]
                 and r['Action'] == 'Modify' and r.get('Replacement') == 'False',
-                'Refused a resource creation/removal/replacement or non-release infrastructure change')
+                'Refused unreviewed change: '
+                + str(r.get('LogicalResourceId')) + ' (' + str(r.get('ResourceType'))
+                + ', action=' + str(r.get('Action')) + ', replacement=' + str(r.get('Replacement')) + ')')
     old = {p['ParameterKey']: p for p in previous}
     new = {p['ParameterKey']: p for p in change.get('Parameters', [])}
     for key, value in old.items():
@@ -89,6 +91,23 @@ def validate_change_set(change, previous):
         if value.get('ResolvedValue'):
             require(new[key].get('ResolvedValue') == value['ResolvedValue'],
                     'Public AMI/configuration alias resolved to a different value; review an infrastructure update separately')
+
+
+def proposed_change_summary(change, revision, id_):
+    """Preserve reviewable metadata before rejecting/deleting a change set.
+
+    Never include before/after properties, userdata, parameter values or secrets.
+    A proposed change summary is not evidence that anything was executed.
+    """
+    changes = []
+    for entry in change.get('Changes', []):
+        resource = entry['ResourceChange']
+        row = {k: resource.get(k) for k in ('LogicalResourceId', 'ResourceType', 'Action', 'Replacement')}
+        row['details'] = [{'target': {k: detail.get('Target', {}).get(k) for k in ('Attribute', 'Name', 'RequiresRecreation')},
+                           **{k: detail.get(k) for k in ('Evaluation', 'ChangeSource', 'CausingEntity')}}
+                          for detail in resource.get('Details', [])]
+        changes.append(row)
+    return {'revision': revision, 'changeSet': id_, 'scope': 'Proposed changes only; execution not asserted', 'changes': changes}
 
 
 class Delivery(Audit):
@@ -152,15 +171,14 @@ class Delivery(Audit):
                 raise Blocked('Change set not ready within three minutes; no execution requested')
             time.sleep(5)
         require(change['Status'] == 'CREATE_COMPLETE', 'Release change set was not created; inspect CloudFormation event history')
+        folder_out = Path('.aws-build/cd')
+        folder_out.mkdir(parents=True, exist_ok=True)
+        (folder_out / 'change-summary.json').write_text(json.dumps(proposed_change_summary(change, revision, id_), indent=2))
         try:
             validate_change_set(change, stack['Parameters'])
         except AssertionError:
             self.aws('cloudformation', 'delete-change-set', '--change-set-name', id_, '--stack-name', self.args.stack)
             raise
-        folder_out = Path('.aws-build/cd')
-        folder_out.mkdir(parents=True, exist_ok=True)
-        (folder_out / 'change-summary.json').write_text(json.dumps({'revision': revision, 'changeSet': id_,
-            'changes': [{k: c['ResourceChange'].get(k) for k in ('LogicalResourceId', 'ResourceType', 'Action', 'Replacement')} for c in change['Changes']]}, indent=2))
         self.resume_for_test()
         self.aws('cloudformation', 'execute-change-set', '--change-set-name', id_, '--stack-name', self.args.stack)
         complete = self.wait_stack(2700, expected_digest=digest)
