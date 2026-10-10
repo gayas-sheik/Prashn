@@ -53,12 +53,12 @@ Infrastructure lint initially found a missing VPC-link name and an invalid IAM `
 
 | Requirement | Code/configuration | Executed evidence | Live AWS verification |
 | --- | --- | --- | --- |
-| S3 originals/results and private downloads | IMPLEMENTED | TESTED; inspected emulator results and byte comparisons | BLOCKED pending rollout |
-| DynamoDB accounts/documents/history/activity | IMPLEMENTED | TESTED; inspected ownership, history, migration and large-output results | BLOCKED pending rollout |
-| SQS workers, retry, leases and recovery | IMPLEMENTED | TESTED; inspected duplicate, fault, heartbeat and deletion cases | BLOCKED pending rollout |
+| S3 originals/results and private downloads | IMPLEMENTED | TESTED; inspected emulator results and byte comparisons; live health reports S3 mode | Document lifecycle/download verification pending |
+| DynamoDB accounts/documents/history/activity | IMPLEMENTED | TESTED; inspected ownership, history, migration and large-output results; live health reports DynamoDB mode | Account/document/history verification pending |
+| SQS workers, retry, leases and recovery | IMPLEMENTED | TESTED; inspected duplicate, fault, heartbeat and deletion cases; live health reports SQS mode | Actual job processing/recovery verification pending |
 | Automatic API/worker scaling | IMPLEMENTED in template | TESTED by schema validation only | BLOCKED; no live scaling event executed |
-| CloudWatch logs/metrics/alarms | IMPLEMENTED in bootstrap/template | TESTED by source/schema review and inspected owner-supplied log-stream/event output | VERIFIED for delivery of the supplied API/worker application logs; metrics/alarms and corrected bootstrap stream remain unverified |
-| Single-entry deployment | IMPLEMENTED | Shell syntax, template validation and eight handshake regressions passed; CloudShell native rebuild and 35 tests passed | FAILED: main stack rolled back after no worker success signal; corrected-handshake retry pending |
+| CloudWatch logs/metrics/alarms | IMPLEMENTED in bootstrap/template | TESTED by source/schema review and inspected owner-supplied log-stream/event output | VERIFIED for application log delivery in the first rolled-back attempt; v2 logs/metrics/alarms/bootstrap stream remain unverified |
+| Single-entry deployment | IMPLEMENTED | Shell/template/handshake checks passed; corrected retry printed website; independent HTTP checks passed | VERIFIED for reachable release and frontend publication; explicit stack/signal-event inspection pending; historical failed attempts retained below |
 | Existing-data import | IMPLEMENTED | TESTED with private synthetic snapshot; repeat import/source-preservation inspected | BLOCKED; real production data not imported |
 | Rendered AWS UI and error states | Existing design retained; upload integration changed | Frontend compile/lint passed | BLOCKED pending deployed browser checks |
 
@@ -94,3 +94,29 @@ The owner's worker console output confirms native checks, service and CloudWatch
 Correction: `infra/signal-ready.sh` checks for a creating/updating stack, obtains and validates its EC2 instance ID via IMDSv2, and sends the readiness signal with that ID. It propagates lookup/metadata/signal failures, uses bounded SDK/metadata retries, and prints no metadata token. The generated user data invokes it after the existing application startup checks; the release archive includes the helper. Bootstrap output now goes to a separate `{instance_id}/bootstrap` CloudWatch stream for future diagnosis.
 
 Local `python -m unittest discover -s infra/tests -v` passed **8/8** stubbed handshake checks in **1.52 seconds**: creation, update, completed-stack scale-out, rollback, invalid hostname ID, failed metadata retrieval, failed stack lookup and failed signal API. These contact neither AWS nor IMDS. Template regeneration and `cfn-lint infra/template.json infra/artifacts.json` passed. Application code was not changed by this correction; the latest actual backend evidence remains the owner's 35/35 CloudShell result. An actual accepted instance-ID readiness signal and complete corrected deployment remain pending a separate retry. Historical failed-run evidence is retained above.
+
+## Corrected v2 publication and independent public checks
+
+The owner pulled `4fa4879` and attempted `PRASHN_STACK=prashn-cloud-v2 ... bash deploy.sh apply`. A first v2 attempt stopped at native validation because `g++` was missing in the current CloudShell environment; it had not reached provisioning. The newly installed tmux client also reported `server version is too old for client`. Guidance was corrected to reinstall the C++ tools, use a separate tmux server socket with `env -u TMUX tmux -L prashn-v2 ...`, and append the deployment output to a persistent home-directory log. This does not kill the existing CloudShell tmux server and cannot preserve a process across full compute-environment shutdown.
+
+The subsequent supplied terminal text shows all **eight handshake tests passed**, frontend/backend install/build/test stages were entered, both CloudFormation deployment waits were passed, and the script printed **`Website: https://d1ew9wh9ondbo.cloudfront.net`**. That pasted terminal text omits some lines, including the backend pass/fail summary and final health body; no missing command output is reconstructed or claimed as directly inspected.
+
+Independent commands executed from the audit workstation on **10 October 2026, approximately 05:39-05:40 IST** (00:09-00:10 UTC):
+
+```powershell
+curl.exe -i --max-time 20 https://d1ew9wh9ondbo.cloudfront.net/api/health
+curl.exe -sS -i --max-time 20 https://d1ew9wh9ondbo.cloudfront.net/
+curl.exe -sS -i --max-time 20 https://d1ew9wh9ondbo.cloudfront.net/api/documents
+curl.exe -sS -i --max-time 20 -H 'Authorization: Bearer invalid-audit-token' https://d1ew9wh9ondbo.cloudfront.net/api/documents
+```
+
+| Endpoint / request | Inspected result |
+| --- | --- |
+| HTTPS `/api/health` | **200**, `status: ok`, production, `processingMode: sqs`, `storageMode: s3`, `databaseMode: dynamodb`, `release: 4fa4879f5b545eb8e06418b8549704cd7f85282b`, extractive Q&A, `layout-fields-v2` |
+| HTTPS `/` | **200**, frontend HTML from Amazon S3 through CloudFront; references `index-Bi5WCa2l.js` and unchanged `index-CSsXUjLz.css` |
+| `/api/documents`, no Authorization | **401**, `{"error":"Unauthorized","message":"Missing token"}` |
+| `/api/documents`, malformed bearer token | **401**, `{"error":"Unauthorized","message":"Invalid token"}` |
+
+TLS verification was enabled; no insecure option was used. Responses carried CloudFront headers and API Gateway request IDs on API responses. A web-reader tool could not access the URL; the actual curl requests above succeeded and supply the evidence. No authenticated user records were read, created or changed by these checks.
+
+These checks establish public reachability, published frontend HTML, the active release/modes and two unauthenticated rejection cases. They do not establish valid-login behavior, user isolation, actual S3/DynamoDB document operations, SQS processing, retry/deletion, new-stack log delivery, scaling or rendered UI. No AWS console credentials were used by the audit workstation; explicit `CREATE_COMPLETE` and accepted instance-ID signal events remain owner-side verification steps. Existing-data migration and deliberate cleanup of the original server/failed-stack retained resources remain outstanding. **Website deployment passed these initial checks; full cloud acceptance is not yet complete.**

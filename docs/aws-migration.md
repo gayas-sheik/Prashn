@@ -1,6 +1,6 @@
 # Prashn AWS migration and deployment
 
-Prepared on **10 October 2026 (Asia/Kolkata)**. The cloud application code and deployment files are implemented and tested locally. **The new managed-storage/scaling stack has not completed deployment or acceptance in AWS.** An owner-run attempt created infrastructure and started both services, then rolled back after missing readiness signals; see [the rollout evidence](aws-migration-test-report.md#aws-rollout-and-readiness-signal-correction). The existing [EC2 installation](ec2-deployment.md) continues to use its original compiled application, SQLite and local storage.
+Prepared on **10 October 2026 (Asia/Kolkata)**. The corrected owner-run `prashn-cloud-v2` deployment reached website publication at **https://d1ew9wh9ondbo.cloudfront.net/**. Independent HTTPS checks returned frontend HTML and healthy cloud-mode API responses for release **`4fa4879`**, plus 401 rejection of missing/malformed document tokens. **Live document workflows, scaling, new-stack log delivery and existing-data migration still require acceptance checks.** The earlier `prashn-cloud` attempt rolled back; see [the rollout evidence](aws-migration-test-report.md#corrected-v2-publication-and-independent-public-checks). The original [EC2 installation](ec2-deployment.md) was not modified by this rollout.
 
 ## Architecture supplied by this change
 
@@ -89,6 +89,7 @@ First inspect the template and run:
 ```bash
 export AWS_REGION=us-east-1
 export EXPECTED_ACCOUNT=683146427271
+export PRASHN_STACK=prashn-cloud-v2
 bash deploy.sh plan
 ```
 
@@ -105,8 +106,8 @@ Apply asks for the account ID before creating resources and requires a clean com
 Use a terminal multiplexer to preserve the process during an ordinary connection loss, and retain a deployment log. A full CloudShell environment shutdown can still stop the process. In CloudShell:
 
 ```bash
-sudo dnf install -y tmux
-tmux new -s prashn-deploy
+sudo dnf install -y gcc-c++ make python3 tmux
+env -u TMUX tmux -L prashn-v2 new-session -A -s prashn-deploy -c "$HOME/Prashn-cloud"
 ```
 
 Inside that session, from the repository folder:
@@ -114,10 +115,10 @@ Inside that session, from the repository folder:
 ```bash
 mkdir -p .aws-build
 set -o pipefail
-EXPECTED_ACCOUNT=683146427271 AWS_REGION=us-east-1 bash deploy.sh apply 2>&1 | tee .aws-build/deploy.log
+PRASHN_STACK=prashn-cloud-v2 EXPECTED_ACCOUNT=683146427271 AWS_REGION=us-east-1 bash deploy.sh apply 2>&1 | tee -a .aws-build/deploy.log
 ```
 
-After reconnecting, `tmux attach -t prashn-deploy` reattaches to the session if it still exists. Check the process and stack before starting a second deployment.
+After reconnecting, `env -u TMUX tmux -L prashn-v2 attach -t prashn-deploy` reattaches to the separate server/session if it still exists. A named socket avoids connecting a newly installed client to an older CloudShell tmux server; do not kill CloudShell's default server. Check the process and stack before starting a second deployment. CloudShell persists software installed under `$HOME`; system build tools may require reinstallation after the compute environment restarts, as described in [AWS's storage guidance](https://docs.aws.amazon.com/cloudshell/latest/userguide/cloudshell-security-faqs.html).
 
 For recovery from the observed `prashn-cloud` **ROLLBACK_COMPLETE**, preserve the failed stack and its retained logs/data resources while diagnosing. Use the corrected release with `PRASHN_STACK=prashn-cloud-v2` for a separate retry, avoiding the old retained log-group names. This creates new resources and does not reuse or migrate data from the failed attempt. The script supports a custom name; the same name must be supplied on every later update. Review the old attempt's retained buckets/table/logs and artifact stack for deliberate cleanup after successful verification; they are not removed by the retry.
 
@@ -139,13 +140,13 @@ Pause uploads/processing and stop the old backend before taking the snapshot. Us
 Prepare the new backend dependencies/build on the authenticated operator machine, then validate without writing:
 
 ```bash
-python3 infra/cloud_command.py migrate prashn-cloud --snapshot /private/snapshot
+python3 infra/cloud_command.py migrate prashn-cloud-v2 --snapshot /private/snapshot
 ```
 
 The validator checks ownership, identity collisions, structured JSON, source paths and original checksums before import. It never merges accounts by matching email alone. Review the record counts and resolve any collision without changing ownership incorrectly. For the consistent final cutover, pause both new Auto Scaling groups at desired/minimum zero through the operator's AWS controls before applying the import; this is deliberate maintenance, not the normal stack setting.
 
 ```bash
-python3 infra/cloud_command.py migrate prashn-cloud --snapshot /private/snapshot --apply
+python3 infra/cloud_command.py migrate prashn-cloud-v2 --snapshot /private/snapshot --apply
 ```
 
 The importer reads SQLite read-only, preserves user IDs/password hashes, uploads originals and full evidence, imports ordered history/activity and verifies target ownership/checksums. Retry against the same unchanged source can resume an interrupted import without duplicating imported history. S3 and DynamoDB do not share a transaction; an interrupted import can leave partial target state, so do not accept users until verification succeeds. Restore the groups to minimum/desired one afterward. Pending or legacy records without page evidence are dispatched for reprocessing.
@@ -206,4 +207,4 @@ See [the preparation verification report](aws-migration-test-report.md) for exec
 - Do not stop individual ASG instances as a cost-control method: the group can replace them. For a temporary pause, intentionally reduce group minimum/desired capacity; ALB and retained storage still incur charges. Review a deliberate stack teardown separately from data deletion.
 - Development/build dependency advisories remain. Password recovery, token revocation, per-user/IP abuse controls, a complete production security review and CI/CD are not included. API Gateway's configured throttling is a service-level control.
 
-**Preparation verdict: locally tested and ready for a reviewed AWS rollout. Live AWS deployment, scaling, logging, browser acceptance and production data migration remain unverified.**
+**Current verdict: website publication and public health/auth rejection checks passed for the corrected cloud release. Full cloud acceptance, scaling, new-stack logging, browser workflows and production data migration remain unfinished.**
