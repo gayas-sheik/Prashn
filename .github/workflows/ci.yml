@@ -1,0 +1,72 @@
+name: Prashn CI
+
+'on':
+  push:
+    branches: [main, aws-migration-preparation]
+  pull_request:
+    branches: [main, aws-migration-preparation]
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      package_release:
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22.23.3'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            backend/package-lock.json
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.11'
+      - name: Prepare isolated emulator and schema tools
+        run: |
+          mkdir -p backend/.test-output
+          python3 -m venv backend/.test-output/aws-venv
+          backend/.test-output/aws-venv/bin/python -m pip install -r backend/tests/aws-test-requirements.txt -r infra/ci-requirements.txt
+      - name: Install locked frontend and backend dependencies
+        run: |
+          npm ci --include=dev
+          npm --prefix backend ci --include=dev
+          bash infra/verify-native.sh backend
+      - name: Build and lint the frontend
+        run: |
+          npm run build
+          npm run lint
+      - name: Backend regression checks
+        run: npm --prefix backend test
+      - name: AWS adapters against local emulator
+        run: npm --prefix backend run test:aws
+      - name: Infrastructure and workflow safety checks
+        run: |
+          python3 -W error::ResourceWarning -m unittest discover -s infra/tests -v
+          for script in deploy.sh verify.sh infra/*.sh; do bash -n "$script"; done
+          python3 infra/build_template.py
+          git diff --exit-code -- infra/template.json
+          backend/.test-output/aws-venv/bin/cfn-lint infra/template.json infra/artifacts.json
+      - name: Package the tested source for approved delivery
+        if: inputs.package_release == true
+        run: bash infra/package-ci-release.sh
+      - name: Retain tested release
+        if: inputs.package_release == true
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: prashn-release-${{ github.sha }}
+          path: .aws-build/ci-release/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
