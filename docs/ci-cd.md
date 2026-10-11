@@ -10,7 +10,7 @@ This is continuous integration with manually approved continuous delivery. It is
 | --- | --- |
 | Automatic CI | GitHub run [38072471640](https://github.com/gayas-sheik/Prashn/actions/runs/38072471640) passed for implementation commit `ba092929e5468897e769d3ba499fe9a5c57d5d76`, including frontend build/lint, backend regressions, local AWS-emulator checks, infrastructure checks, release packaging and artifact upload. The earlier run `38069908701` also passed, with packaging skipped before the push-packaging condition was added. |
 | Artifact and release guards | Implemented; local tests cover archive privacy, checksum/revision verification, real shell packaging, release-only change sets, immutable OIDC trust and safe cleanup controls. These are not live AWS deployment tests. |
-| GitHub delivery workflow | Active. [Run #5](https://github.com/gayas-sheik/Prashn/actions/runs/38081918138), source `72592cf`, passed CI, authentication and the corrected guard. CloudFormation rolled back after both workload roles failed to resolve the existing log-group ARN: missing `logs:DescribeLogGroups`. Downloaded cleanup evidence inspected both fleets at zero. The dependency-read fix requires another IAM refresh; successful delivery remains pending. |
+| GitHub delivery workflow | Active. [Run #6](https://github.com/gayas-sheik/Prashn/actions/runs/38083584260), source `12bc3f1`, passed CI, authentication and the release guard but both update and rollback failed on launch-template authorization. Its cleanup job refused the failed rollback state. The owner subsequently ran the repaired cleanup helper (`9b2c294`) and supplied its inspected zero-capacity result. Launch authorization, dry-run preflight and operator recovery are now implemented; successful live recovery/delivery remain pending. |
 | AWS application | The earlier owner-run cloud acceptance passed with limitations and inspected both fleets at zero afterward. That evidence predates CI/CD and does not prove this workflow has deployed anything. |
 
 ## One-time setup in prashn-admin CloudShell
@@ -18,6 +18,20 @@ This is continuous integration with manually approved continuous delivery. It is
 Use the IAM account, not root. Keep uploads stopped during setup and delivery. The original standalone Prashn-Server is separate and is not modified by this workflow.
 
 After a deployment-policy correction, rerun the setup helper below to refresh the existing role before starting a **new** delivery run. Re-running an old GitHub run uses its old source revision. The log-group metadata read is restricted to `us-east-1`; AWS requires `Resource: "*"` for DescribeLogGroups, while log-content reads stay scoped to the application group. Existing ALB/target-group metadata reads are also region-restricted; GetDistribution is scoped to the existing distribution. These dependency reads grant no new infrastructure write actions.
+
+The launch authorization correction also grants RunInstances for the two existing templates, pinned AMI, stack subnets/security groups and new instance/volume/network-interface IDs in this account and region. Instances must be t3.small with IMDSv2 required. CreateTags is permitted only during RunInstances. This permission is needed for Auto Scaling's validation of a changed template version; it is not a general EC2 administrator grant. Delivery invokes RunInstances only with `--dry-run`, which returns DryRunOperation when authorized and creates nothing. It checks both templates in both subnets before publishing an artifact or starting compute. The bounded workflow and ASG settings control instance counts; IAM and budget alerts are not spending caps.
+
+## Recover a stopped failed rollback
+
+For UPDATE_ROLLBACK_FAILED, use the existing **prashn-admin CloudShell** rather than starting another GitHub delivery. After pulling the latest cloud branch, run:
+
+```bash
+python3 infra/recover_delivery.py --account 683146427271
+```
+
+This helper writes the IAM plan and uses the existing account-ID prompt to refresh the deployment role. It then continues the existing rollback without resources-to-skip, waits for UPDATE_ROLLBACK_COMPLETE and drains/pauses compute. Rollback may temporarily launch the previous workload. It neither deploys a new application release nor publishes frontend files. Saved recovery/pause reports are under `.aws-build/audit-*`. If it fails, inspect the report and stack events; do not assume recovery or cleanup succeeded.
+
+The standalone `python3 infra/cd_release.py pause --account 683146427271` also supports a **stopped** failed rollback with identity/resource-binding checks and queue drain. Ordinary release and application acceptance still reject UPDATE_ROLLBACK_FAILED. Cleanup waits while a stack operation is active and never skips resources to get a green result.
 
 Update the cloud checkout:
 

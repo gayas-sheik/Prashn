@@ -229,5 +229,24 @@ class VerificationTests(unittest.TestCase):
             audit.inspect_document('DOC-test', doc)
 
 
+class DryRunTransportTests(unittest.TestCase):
+    def test_only_non_launching_dry_run_can_accept_expected_aws_error(self):
+        with tempfile.TemporaryDirectory() as directory:
+            audit = verify.Audit(SimpleNamespace(account='683146427271',stack='prashn-cloud-v2',region='us-east-1'))
+            audit.directory = Path(directory)
+            success = SimpleNamespace(returncode=255,stderr='An error occurred (DryRunOperation) when calling the RunInstances operation',stdout='')
+            with patch.object(verify.subprocess,'run',return_value=success) as run:
+                self.assertEqual(audit.aws('ec2','run-instances','--dry-run',expected_error='DryRunOperation'),{'expectedError':'DryRunOperation'})
+                self.assertIn('--dry-run',run.call_args.args[0])
+            denied = SimpleNamespace(returncode=255,stderr='An error occurred (UnauthorizedOperation) when calling the RunInstances operation: fixture-private-data',stdout='')
+            with patch.object(verify.subprocess,'run',return_value=denied):
+                with self.assertRaisesRegex(verify.Blocked,'UnauthorizedOperation'):
+                    audit.aws('ec2','run-instances','--dry-run',expected_error='DryRunOperation')
+            with patch.object(verify.subprocess,'run') as run:
+                with self.assertRaises(AssertionError):audit.aws('ec2','run-instances',expected_error='DryRunOperation')
+                with self.assertRaises(AssertionError):audit.aws('iam','create-user','--dry-run',expected_error='DryRunOperation')
+                run.assert_not_called()
+
+
 if __name__ == '__main__':
     unittest.main()

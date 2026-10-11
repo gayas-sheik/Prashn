@@ -198,7 +198,36 @@ class Delivery(Audit):
     def stack(self):
         return self.aws('cloudformation', 'describe-stacks', '--stack-name', self.args.stack)['Stacks'][0]
 
-    def wait_stack(self, seconds, expected_digest=None, previous_updated=None):
+    def launch_permission_preflight(self, stack):
+        parameters = {p['ParameterKey']: p for p in stack['Parameters']}
+        subnets = parameters['SubnetIds']['ParameterValue'].split(',')
+        ami = parameters['UbuntuImage']['ResolvedValue']
+        require(len(subnets) == 2 and all(re.fullmatch(r'subnet-[a-f0-9]+', s) for s in subnets), 'Unexpected deployment subnets')
+        for prefix in ('Api','Worker'):
+            launch = self.resources[prefix + 'Launch']
+            versions = self.aws('ec2', 'describe-launch-template-versions', '--launch-template-id', launch,
+                                '--versions', '$Latest')['LaunchTemplateVersions']
+            require(len(versions) == 1, 'Expected one latest launch-template version')
+            version = versions[0]
+            data = version['LaunchTemplateData']
+            interfaces = data.get('NetworkInterfaces', [])
+            expected_profile = f'arn:aws:iam::{self.args.account}:instance-profile/' + self.resources[prefix + 'Profile']
+            require(data.get('ImageId') == ami and data.get('InstanceType') == 't3.small'
+                    and data.get('IamInstanceProfile', {}).get('Arn') == expected_profile
+                    and data.get('MetadataOptions', {}).get('HttpTokens') == 'required'
+                    and len(interfaces) == 1 and interfaces[0].get('DeviceIndex') == 0
+                    and interfaces[0].get('Groups') == [self.resources[prefix + 'Security']],
+                    'Launch-template AMI/type/profile/security differs from the reviewed stack')
+            for subnet in subnets:
+                interface = dict(interfaces[0], SubnetId=subnet)
+                result = self.aws('ec2', 'run-instances', '--launch-template',
+                                  f'LaunchTemplateId={launch},Version={version["VersionNumber"]}',
+                                  '--network-interfaces', json.dumps([interface]), '--count', '1',
+                                  '--dry-run', expected_error='DryRunOperation')
+                require(result.get('expectedError') == 'DryRunOperation', 'Launch authorization was not inspected')
+        return 'Both existing templates authorized in both stack subnets using EC2 dry runs; no instances created'
+
+    def wait_stack(self, seconds, expected_digest=None, previous_updated=None, previous_status=None):
         end = min(self.deadline, time.monotonic() + seconds)
         observed_update = False
         while time.monotonic() < end:
@@ -215,7 +244,8 @@ class Delivery(Audit):
                 # terminal state until this operation starts or its timestamp
                 # advances; promptly return an actual completed rollback.
                 timestamp_changed = previous_updated is not None and stack.get('LastUpdatedTime') is not None and stack['LastUpdatedTime'] != previous_updated
-                if stack['StackStatus'] not in ('CREATE_COMPLETE', 'UPDATE_COMPLETE') and (observed_update or timestamp_changed):
+                status_changed = previous_status is not None and stack['StackStatus'] != previous_status
+                if stack['StackStatus'] not in ('CREATE_COMPLETE', 'UPDATE_COMPLETE') and (observed_update or timestamp_changed or status_changed):
                     return stack
             print('CloudFormation:', stack['StackStatus'], flush=True)
             time.sleep(30)
@@ -238,6 +268,7 @@ class Delivery(Audit):
         template = json.loads(original) if isinstance(original, str) else original
         require(template == json.loads(Path('infra/template.json').read_text()),
                 'Repository infrastructure differs from existing stack; code-only CD cannot apply it')
+        self.record('Non-launching EC2 permission preflight', 'VERIFIED', self.launch_permission_preflight(stack))
         require(self.queue_idle(), 'Drain existing jobs before deploying the demo stack')
         digest = manifest['archiveSha256']
         self.aws('s3', 'cp', str(folder / 'release.tar.gz'), 's3://' + config['ArtifactBucket'] + '/' + digest + '.tar.gz',

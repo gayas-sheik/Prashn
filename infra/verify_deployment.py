@@ -175,7 +175,10 @@ class Audit:
         path.write_text('\n'.join(lines) + '\n', encoding='utf-8')
         path.chmod(0o600)
 
-    def aws(self, service, operation, *arguments, missing_ok=False):
+    def aws(self, service, operation, *arguments, missing_ok=False, expected_error=None):
+        if expected_error is not None:
+            require(service == 'ec2' and operation == 'run-instances' and '--dry-run' in arguments
+                    and expected_error == 'DryRunOperation', 'Expected-error handling is restricted to non-launching EC2 dry runs')
         if time.monotonic() >= self.deadline or self.aws_count >= 240:
             raise Blocked('AWS call/time limit reached')
         self.aws_count += 1
@@ -189,9 +192,12 @@ class Audit:
         if process.returncode:
             code = re.search(r'\(([^()\n]+)\) when calling', process.stderr)
             code = code.group(1) if code else 'CLI error'
+            if expected_error and code == expected_error:
+                return {'expectedError': code}
             if missing_ok and code in ('404', 'NoSuchKey', 'NotFound'):
                 return None
             raise Blocked(f'{service} {operation}: {code}')
+        require(expected_error is None, 'EC2 dry run did not return the expected DryRunOperation authorization result')
         return json.loads(process.stdout or '{}')
 
     def http(self, route, method='GET', token=None, body=None, data=None, headers=None, external=False):
@@ -229,7 +235,7 @@ class Audit:
         require(code == expected, f'{kwargs.get("method", "GET")} {route}: expected HTTP {expected}, got {code}')
         return value
 
-    def preflight(self, *, allow_rollback_complete=False):
+    def preflight(self, *, allow_rollback_complete=False, allow_rollback_failed=False):
         self.ready = False
         identity = self.aws('sts', 'get-caller-identity')
         require(identity['Account'] == self.args.account, 'Wrong AWS account; no workload operations authorized')
@@ -238,6 +244,8 @@ class Audit:
         allowed = {'CREATE_COMPLETE', 'UPDATE_COMPLETE'}
         if allow_rollback_complete:
             allowed.add('UPDATE_ROLLBACK_COMPLETE')
+        if allow_rollback_failed:
+            allowed.add('UPDATE_ROLLBACK_FAILED')
         require(stack['StackStatus'] in allowed, 'Stack is not complete')
         self.outputs = {o['OutputKey']: o['OutputValue'] for o in stack['Outputs']}
         self.url = self.outputs['WebsiteUrl'].rstrip('/')

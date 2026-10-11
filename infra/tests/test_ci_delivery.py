@@ -18,6 +18,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import cd_release as delivery
 import setup_github_oidc as setup
+from recover_delivery import Recovery
 from verify_deployment import Audit
 
 
@@ -141,7 +142,8 @@ class DeliveryTests(unittest.TestCase):
     def test_private_signing_secret_is_not_granted_to_deployment_role(self):
         bindings = dict(account='683146427271',region='us-east-1',DocumentBucket='docs',FrontendBucket='front',ArtifactBucket='artifacts',
                         DataTable='table',stackArn='stack',launchArns=['lt'],groupArns=['asg'],roleArns=['role'],profileArns=['profile'],
-                        boundaryArns=['boundary'],queueArns=['queue'],alarmArns=['owned-alarm'],logArn='logs',distributionArn='distribution',amiParameter='/aws/service/canonical/ubuntu/ami-id')
+                        boundaryArns=['boundary'],queueArns=['queue'],alarmArns=['owned-alarm'],logArn='logs',distributionArn='distribution',amiParameter='/aws/service/canonical/ubuntu/ami-id',
+                        launchResourceArns=['pinned-ami','owned-subnet','owned-security'])
         policy = setup.deployment_policy(bindings)
         grants = [s for s in policy['Statement'] if s['Effect']=='Allow']
         actions = {a for s in grants for a in s['Action']}
@@ -176,6 +178,19 @@ class DeliveryTests(unittest.TestCase):
         self.assertEqual(load_balancer['Condition']['StringEquals']['aws:RequestedRegion'],'us-east-1')
         distribution = next(s for s in grants if 'cloudfront:GetDistribution' in s['Action'])
         self.assertEqual(distribution['Resource'],'distribution')
+        launches = [s for s in grants if 'ec2:RunInstances' in s['Action']]
+        self.assertEqual(len(launches),2)
+        for launch in launches:
+            self.assertEqual(launch['Condition']['ArnEquals']['ec2:LaunchTemplate'],['lt'])
+            self.assertEqual(launch['Condition']['StringEquals']['aws:RequestedRegion'],'us-east-1')
+            self.assertNotEqual(launch['Resource'],'*')
+        instance = next(s for s in launches if isinstance(s['Resource'],str))
+        self.assertEqual(instance['Condition']['StringEquals']['ec2:InstanceType'],'t3.small')
+        self.assertEqual(instance['Condition']['StringEquals']['ec2:MetadataHttpTokens'],'required')
+        tags = next(s for s in grants if 'ec2:CreateTags' in s['Action'])
+        self.assertEqual(tags['Condition']['StringEquals']['ec2:CreateAction'],'RunInstances')
+        self.assertNotIn('ec2:TerminateInstances',actions)
+        self.assertNotIn('cloudformation:ContinueUpdateRollback',actions)
 
     def observed_change(self):
         fixture = json.loads((Path(__file__).parent/'fixtures/observed-release-dependencies.json').read_text())
@@ -336,6 +351,59 @@ class DeliveryTests(unittest.TestCase):
              patch.object(audit,'pause') as pause:
             with self.assertRaises(AssertionError):audit.safe_pause()
             pause.assert_not_called()
+
+    def test_launch_dry_runs_cover_both_templates_and_subnets_without_creating_instances(self):
+        audit = delivery.Delivery(SimpleNamespace(account='683146427271',stack='prashn-cloud-v2',region='us-east-1',command='deploy'))
+        audit.directory = self.folder
+        audit.resources = {p + k: p.lower() + k.lower() for p in ('Api','Worker') for k in ('Launch','Profile','Security')}
+        stack = {'Parameters':[{'ParameterKey':'SubnetIds','ParameterValue':'subnet-abc,subnet-def'},
+                               {'ParameterKey':'UbuntuImage','ResolvedValue':'ami-abc'}]}
+        calls = []
+        def aws(service, operation, *args, **kwargs):
+            calls.append((service,operation,args,kwargs))
+            if operation == 'describe-launch-template-versions':
+                prefix = 'api' if args[1] == 'apilaunch' else 'worker'
+                return {'LaunchTemplateVersions':[{'VersionNumber':3,'LaunchTemplateData':{
+                    'ImageId':'ami-abc','InstanceType':'t3.small','MetadataOptions':{'HttpTokens':'required'},
+                    'IamInstanceProfile':{'Arn':'arn:aws:iam::683146427271:instance-profile/' + prefix + 'profile'},
+                    'NetworkInterfaces':[{'DeviceIndex':0,'AssociatePublicIpAddress':True,'Groups':[prefix + 'security']}],
+                    'UserData':'fixture-private-data'}}]}
+            self.assertEqual(operation,'run-instances')
+            self.assertIn('--dry-run',args)
+            self.assertEqual(args[args.index('--count') + 1],'1')
+            self.assertEqual(kwargs,{'expected_error':'DryRunOperation'})
+            return {'expectedError':'DryRunOperation'}
+        audit.aws = aws
+        self.assertIn('no instances created',audit.launch_permission_preflight(stack))
+        runs = [c for c in calls if c[1] == 'run-instances']
+        self.assertEqual(len(runs),4)
+        self.assertEqual([json.loads(c[2][3])[0]['SubnetId'] for c in runs],['subnet-abc','subnet-def'] * 2)
+        self.assertNotIn('fixture-private-data',str(runs))
+        with patch.object(audit,'aws',side_effect=delivery.Blocked('UnauthorizedOperation')):
+            with self.assertRaises(delivery.Blocked):audit.launch_permission_preflight(stack)
+
+    def test_recovery_continues_only_owned_stopped_rollback_without_resource_skipping(self):
+        audit = Recovery(SimpleNamespace(account='683146427271',stack='prashn-cloud-v2',region='us-east-1',command='recover'))
+        audit.directory = self.folder
+        stack = {'StackStatus':'UPDATE_ROLLBACK_FAILED','LastUpdatedTime':'old'}
+        identity = {'Arn':'arn:aws:iam::683146427271:user/prashn-admin'}
+        with patch.object(audit,'preflight'),patch.object(audit,'stack',return_value=stack), \
+             patch.object(audit,'queue_idle',return_value=True),patch.object(audit,'group_state'), \
+             patch.object(audit,'aws',side_effect=[identity,{}]) as aws, \
+             patch.object(audit,'wait_stack',return_value={'StackStatus':'UPDATE_ROLLBACK_COMPLETE'}):
+            self.assertIn('no resources skipped',audit.recover())
+            self.assertEqual(aws.call_args_list[-1].args,('cloudformation','continue-update-rollback','--stack-name','prashn-cloud-v2'))
+        with patch.object(audit,'preflight'),patch.object(audit,'stack',return_value=stack), \
+             patch.object(audit,'queue_idle',return_value=False),patch.object(audit,'aws',return_value=identity) as aws:
+            with self.assertRaises(AssertionError):audit.recover()
+            self.assertEqual(aws.call_count,1)
+
+    def test_recovery_wait_accepts_fast_completed_rollback_without_changed_update_timestamp(self):
+        audit = delivery.Delivery(SimpleNamespace(account='683146427271',stack='prashn-cloud-v2',region='us-east-1',command='recover'))
+        audit.directory = self.folder
+        with patch.object(audit,'stack',return_value={'StackStatus':'UPDATE_ROLLBACK_COMPLETE','LastUpdatedTime':'old'}):
+            self.assertEqual(audit.wait_stack(60,expected_digest='rollback-recovery',previous_updated='old',
+                                            previous_status='UPDATE_ROLLBACK_FAILED')['StackStatus'],'UPDATE_ROLLBACK_COMPLETE')
 
 
 if __name__ == '__main__': unittest.main()

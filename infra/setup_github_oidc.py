@@ -80,6 +80,19 @@ def deployment_policy(b):
          'autoscaling:DescribeAutoScalingGroups', 'autoscaling:DescribePolicies', 'autoscaling:DescribeScalingActivities',
          'autoscaling:DescribeScalingProcessTypes'], '*', {'StringEquals': {'aws:RequestedRegion': region}})
     add(['ec2:CreateLaunchTemplateVersion', 'ec2:DeleteLaunchTemplateVersions', 'ec2:ModifyLaunchTemplate'], b['launchArns'])
+    # Auto Scaling checks RunInstances authorization when a group's template
+    # version changes, including during rollback. Restrict every resource to
+    # the existing templates, AMI/network, account and region.
+    launch_condition = {'ArnEquals': {'ec2:LaunchTemplate': b['launchArns']},
+                        'StringEquals': {'aws:RequestedRegion': region}}
+    ec2_prefix = f'arn:aws:ec2:{region}:{account}:'
+    add(['ec2:RunInstances'], b['launchArns'] + b['launchResourceArns'] +
+        [ec2_prefix + 'network-interface/*', ec2_prefix + 'volume/*'], launch_condition)
+    add(['ec2:RunInstances'], ec2_prefix + 'instance/*', {
+        **launch_condition, 'StringEquals': {'aws:RequestedRegion': region, 'ec2:InstanceType': 't3.small',
+                                           'ec2:MetadataHttpTokens': 'required'}})
+    add(['ec2:CreateTags'], [ec2_prefix + kind + '/*' for kind in ('instance','volume','network-interface')],
+        {'StringEquals': {'aws:RequestedRegion': region, 'ec2:CreateAction': 'RunInstances'}})
     add(['autoscaling:UpdateAutoScalingGroup', 'autoscaling:SetDesiredCapacity', 'autoscaling:SuspendProcesses',
          'autoscaling:ResumeProcesses', 'autoscaling:TerminateInstanceInAutoScalingGroup',
          'autoscaling:PutScalingPolicy', 'autoscaling:DeletePolicy'], b['groupArns'])
@@ -126,7 +139,9 @@ class Setup(Audit):
         self.folder.mkdir(parents=True, exist_ok=True)
 
     def plan(self):
-        self.preflight(allow_rollback_complete=True)
+        # Only this IAM-repair helper may inspect a stopped failed rollback;
+        # ordinary deployment and application acceptance still reject it.
+        self.preflight(allow_rollback_complete=True, allow_rollback_failed=True)
         stack = self.aws('cloudformation', 'describe-stacks', '--stack-name', self.args.stack)['Stacks'][0]
         require(not stack.get('RoleARN'), 'Service-role stacks need separate reviewed setup')
         p = {v['ParameterKey']: v['ParameterValue'] for v in stack['Parameters']}
@@ -137,6 +152,13 @@ class Setup(Audit):
         b = {'account': account, 'region': region, 'stackArn': stack['StackId'], 'ArtifactBucket': p['ArtifactBucket'],
              'amiParameter': p['UbuntuImage'], **self.outputs}
         b['launchArns'] = [f'arn:aws:ec2:{region}:{account}:launch-template/{self.resources[k+"Launch"]}' for k in ('Api','Worker')]
+        ami = next(v['ResolvedValue'] for v in stack['Parameters'] if v['ParameterKey'] == 'UbuntuImage')
+        require(re.fullmatch(r'ami-[a-f0-9]+', ami) is not None, 'Stack lacks its pinned resolved AMI')
+        subnets = p['SubnetIds'].split(',')
+        require(len(subnets) == 2 and all(re.fullmatch(r'subnet-[a-f0-9]+', s) for s in subnets), 'Unexpected stack subnets')
+        b['launchResourceArns'] = [f'arn:aws:ec2:{region}::image/{ami}']
+        b['launchResourceArns'] += [f'arn:aws:ec2:{region}:{account}:subnet/{s}' for s in subnets]
+        b['launchResourceArns'] += [f'arn:aws:ec2:{region}:{account}:security-group/{self.resources[k+"Security"]}' for k in ('Api','Worker')]
         groups = self.group_state()
         b['groupArns'] = [g['AutoScalingGroupARN'] for g in groups]
         b['alarmArns'] = [f'arn:aws:cloudwatch:{region}:{account}:alarm:' + self.resources[k] for k in ('QueueBacklog', 'QueueIdle')]
