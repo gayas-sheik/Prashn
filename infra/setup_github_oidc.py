@@ -75,10 +75,11 @@ def deployment_policy(b):
     add(['cloudformation:DescribeStacks', 'cloudformation:DescribeStackResources', 'cloudformation:DescribeStackResource',
          'cloudformation:DescribeStackEvents', 'cloudformation:GetTemplate', 'cloudformation:CreateChangeSet',
          'cloudformation:DescribeChangeSet', 'cloudformation:ExecuteChangeSet', 'cloudformation:DeleteChangeSet'], [b['stackArn'], cfn])
-    add(['ec2:DescribeInstances', 'ec2:DescribeSecurityGroups', 'ec2:DescribeLaunchTemplates', 'ec2:DescribeLaunchTemplateVersions',
-         'ec2:DescribeSubnets', 'ec2:DescribeVpcs', 'ec2:DescribeImages', 'ec2:DescribeAvailabilityZones',
-         'autoscaling:DescribeAutoScalingGroups', 'autoscaling:DescribePolicies', 'autoscaling:DescribeScalingActivities',
-         'autoscaling:DescribeScalingProcessTypes'], '*', {'StringEquals': {'aws:RequestedRegion': region}})
+    add(['ec2:Describe*',
+         # CloudFormation's rolling-update orchestration also describes
+         # schedules, member instances, lifecycle hooks and existing tags.
+         # Cover ASG metadata reads; mutation grants remain separately bound.
+         'autoscaling:Describe*'], '*', {'StringEquals': {'aws:RequestedRegion': region}})
     add(['ec2:CreateLaunchTemplateVersion', 'ec2:DeleteLaunchTemplateVersions', 'ec2:ModifyLaunchTemplate'], b['launchArns'])
     # Auto Scaling checks RunInstances authorization when a group's template
     # version changes, including during rollback. Restrict every resource to
@@ -95,7 +96,8 @@ def deployment_policy(b):
         {'StringEquals': {'aws:RequestedRegion': region, 'ec2:CreateAction': 'RunInstances'}})
     add(['autoscaling:UpdateAutoScalingGroup', 'autoscaling:SetDesiredCapacity', 'autoscaling:SuspendProcesses',
          'autoscaling:ResumeProcesses', 'autoscaling:TerminateInstanceInAutoScalingGroup',
-         'autoscaling:PutScalingPolicy', 'autoscaling:DeletePolicy'], b['groupArns'])
+         'autoscaling:PutScalingPolicy', 'autoscaling:DeletePolicy',
+         'autoscaling:CreateOrUpdateTags', 'autoscaling:DeleteTags'], b['groupArns'])
     add(['cloudwatch:DescribeAlarms', 'cloudwatch:PutMetricAlarm', 'cloudwatch:DeleteAlarms',
          'cloudwatch:ListTagsForResource'], b['alarmArns'])
     add(['iam:GetRole', 'iam:GetRolePolicy', 'iam:ListRolePolicies', 'iam:ListAttachedRolePolicies', 'iam:PutRolePolicy', 'iam:DeleteRolePolicy'], b['roleArns'])
@@ -120,8 +122,7 @@ def deployment_policy(b):
     add(['logs:FilterLogEvents'], [b['logArn'], b['logArn'] + ':*'])
     # The scaling policy references full names of the existing ALB/target group;
     # stack outputs reference the existing distribution's DomainName.
-    add(['elasticloadbalancing:DescribeTargetHealth', 'elasticloadbalancing:DescribeLoadBalancers',
-         'elasticloadbalancing:DescribeTargetGroups'], '*', {'StringEquals': {'aws:RequestedRegion': region}})
+    add(['elasticloadbalancing:Describe*'], '*', {'StringEquals': {'aws:RequestedRegion': region}})
     add(['cloudfront:GetDistribution', 'cloudfront:GetDistributionConfig', 'cloudfront:CreateInvalidation', 'cloudfront:GetInvalidation'], b['distributionArn'])
     # CloudFormation resolves only this existing public AMI parameter. It gets
     # no permission to read the private JWT parameter.

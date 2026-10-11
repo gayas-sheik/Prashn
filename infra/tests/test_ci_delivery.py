@@ -1,6 +1,7 @@
 """Critical delivery/trust/artifact guards, without AWS calls."""
 from copy import deepcopy
 import hashlib
+import fnmatch
 import io
 import json
 import os
@@ -162,8 +163,9 @@ class DeliveryTests(unittest.TestCase):
         passed = next(s for s in grants if 'iam:PassRole' in s['Action'])
         self.assertEqual(passed['Resource'],['role'])
         self.assertEqual(passed['Condition']['StringEquals']['iam:PassedToService'],['ec2.amazonaws.com','autoscaling.amazonaws.com'])
-        network = next(s for s in grants if 'ec2:DescribeSubnets' in s['Action'])
-        self.assertTrue({'ec2:DescribeSubnets','ec2:DescribeVpcs','ec2:DescribeImages','ec2:DescribeAvailabilityZones'}.issubset(network['Action']))
+        network = next(s for s in grants if 'ec2:Describe*' in s['Action'])
+        for action in ('ec2:DescribeSubnets','ec2:DescribeVpcs','ec2:DescribeImages','ec2:DescribeAvailabilityZones'):
+            self.assertTrue(any(fnmatch.fnmatchcase(action, pattern) for pattern in network['Action']))
         self.assertEqual(network['Condition']['StringEquals']['aws:RequestedRegion'],'us-east-1')
         self.assertNotIn('ec2:CreateSubnet',actions)
         metadata = next(s for s in grants if 'logs:DescribeLogGroups' in s['Action'])
@@ -173,8 +175,7 @@ class DeliveryTests(unittest.TestCase):
         self.assertEqual(contents['Resource'],['logs','logs:*'])
         self.assertNotIn('logs:GetLogEvents',actions)
         self.assertNotIn('logs:CreateLogGroup',actions)
-        load_balancer = next(s for s in grants if 'elasticloadbalancing:DescribeLoadBalancers' in s['Action'])
-        self.assertIn('elasticloadbalancing:DescribeTargetGroups',load_balancer['Action'])
+        load_balancer = next(s for s in grants if 'elasticloadbalancing:Describe*' in s['Action'])
         self.assertEqual(load_balancer['Condition']['StringEquals']['aws:RequestedRegion'],'us-east-1')
         distribution = next(s for s in grants if 'cloudfront:GetDistribution' in s['Action'])
         self.assertEqual(distribution['Resource'],'distribution')
@@ -191,6 +192,18 @@ class DeliveryTests(unittest.TestCase):
         self.assertEqual(tags['Condition']['StringEquals']['ec2:CreateAction'],'RunInstances')
         self.assertNotIn('ec2:TerminateInstances',actions)
         self.assertNotIn('cloudformation:ContinueUpdateRollback',actions)
+        asg_reads = next(s for s in grants if 'autoscaling:Describe*' in s['Action'])
+        self.assertEqual(asg_reads['Condition']['StringEquals']['aws:RequestedRegion'],'us-east-1')
+        for action in ('autoscaling:DescribeScheduledActions','autoscaling:DescribeAutoScalingInstances',
+                       'autoscaling:DescribeTags','autoscaling:DescribeLifecycleHooks'):
+            self.assertTrue(any(fnmatch.fnmatchcase(action, pattern) for pattern in asg_reads['Action']))
+        self.assertFalse(any(fnmatch.fnmatchcase('autoscaling:CreateAutoScalingGroup', pattern) for pattern in asg_reads['Action']))
+        self.assertFalse(any(fnmatch.fnmatchcase('autoscaling:DeleteAutoScalingGroup', pattern) for pattern in asg_reads['Action']))
+        tags = next(s for s in grants if 'autoscaling:CreateOrUpdateTags' in s['Action'])
+        self.assertEqual(tags['Resource'],['asg'])
+        for action in ('autoscaling:CreateAutoScalingGroup','autoscaling:DeleteAutoScalingGroup',
+                       'managed-fleets:UpdateAutoScalingGroup','ssm:GetParameter'):
+            self.assertFalse(any(fnmatch.fnmatchcase(action, pattern) for pattern in actions))
 
     def observed_change(self):
         fixture = json.loads((Path(__file__).parent/'fixtures/observed-release-dependencies.json').read_text())
@@ -404,6 +417,25 @@ class DeliveryTests(unittest.TestCase):
         with patch.object(audit,'stack',return_value={'StackStatus':'UPDATE_ROLLBACK_COMPLETE','LastUpdatedTime':'old'}):
             self.assertEqual(audit.wait_stack(60,expected_digest='rollback-recovery',previous_updated='old',
                                             previous_status='UPDATE_ROLLBACK_FAILED')['StackStatus'],'UPDATE_ROLLBACK_COMPLETE')
+
+    def test_rolling_update_metadata_denial_or_external_schedules_fail_before_mutation(self):
+        audit = delivery.Delivery(SimpleNamespace(account='683146427271',stack='prashn-cloud-v2',region='us-east-1',command='deploy'))
+        audit.directory = self.folder
+        audit.outputs = {'ApiGroup':'owned-api','WorkerGroup':'owned-worker'}
+        calls = []
+        def aws(service,operation,*args,**kwargs):
+            calls.append((service,operation,args))
+            self.assertTrue(operation.startswith('describe-'))
+            return {'ScheduledUpdateGroupActions':[], 'LifecycleHooks':[]}
+        audit.aws = aws
+        self.assertIn('before compute resume',audit.rolling_update_preflight())
+        self.assertEqual([c[1] for c in calls], ['describe-scheduled-actions','describe-lifecycle-hooks'] * 2
+                         + ['describe-auto-scaling-instances','describe-tags'])
+        with patch.object(audit,'aws',side_effect=delivery.Blocked('AccessDenied')):
+            with self.assertRaises(delivery.Blocked):audit.rolling_update_preflight()
+        with patch.object(audit,'aws',return_value={'ScheduledUpdateGroupActions':[{'ScheduledActionName':'external'}]}) as read:
+            with self.assertRaises(AssertionError):audit.rolling_update_preflight()
+            self.assertEqual(read.call_count,1)
 
 
 if __name__ == '__main__': unittest.main()

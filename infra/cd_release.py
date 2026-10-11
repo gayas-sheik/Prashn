@@ -227,6 +227,21 @@ class Delivery(Audit):
                 require(result.get('expectedError') == 'DryRunOperation', 'Launch authorization was not inspected')
         return 'Both existing templates authorized in both stack subnets using EC2 dry runs; no instances created'
 
+    def rolling_update_preflight(self):
+        for key in ('ApiGroup', 'WorkerGroup'):
+            group = self.outputs[key]
+            scheduled = self.aws('autoscaling', 'describe-scheduled-actions', '--auto-scaling-group-name', group,
+                                 '--max-records', '50', '--no-paginate')['ScheduledUpdateGroupActions']
+            require(not scheduled, 'Existing scheduled scaling needs separate review before a demo rolling update')
+            hooks = self.aws('autoscaling', 'describe-lifecycle-hooks', '--auto-scaling-group-name', group)['LifecycleHooks']
+            require(not hooks, 'Existing lifecycle hooks need separate review before a demo rolling update')
+        # These metadata calls are part of CloudFormation's rolling-update
+        # read contract, including while both groups are paused.
+        self.aws('autoscaling', 'describe-auto-scaling-instances', '--max-records', '50', '--no-paginate')
+        self.aws('autoscaling', 'describe-tags', '--filters',
+                 'Name=auto-scaling-group,Values=' + self.outputs['ApiGroup'] + ',' + self.outputs['WorkerGroup'])
+        return 'Scheduled actions, lifecycle hooks, ASG member and tag metadata reads authorized before compute resume'
+
     def wait_stack(self, seconds, expected_digest=None, previous_updated=None, previous_status=None):
         end = min(self.deadline, time.monotonic() + seconds)
         observed_update = False
@@ -269,6 +284,7 @@ class Delivery(Audit):
         require(template == json.loads(Path('infra/template.json').read_text()),
                 'Repository infrastructure differs from existing stack; code-only CD cannot apply it')
         self.record('Non-launching EC2 permission preflight', 'VERIFIED', self.launch_permission_preflight(stack))
+        self.record('Rolling-update metadata preflight', 'VERIFIED', self.rolling_update_preflight())
         require(self.queue_idle(), 'Drain existing jobs before deploying the demo stack')
         digest = manifest['archiveSha256']
         self.aws('s3', 'cp', str(folder / 'release.tar.gz'), 's3://' + config['ArtifactBucket'] + '/' + digest + '.tar.gz',
