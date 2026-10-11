@@ -180,7 +180,8 @@ def stack_failure_detail(failure):
         if event['status'] == 'UPDATE_ROLLBACK_IN_PROGRESS' and current:
             break
         current.append(event)
-    specific = next((e for e in current if e['status'].endswith('_FAILED')), None)
+    specific = next((e for e in current if e['status'] == 'UPDATE_FAILED'
+                     and 'cancelled' not in e['reason'].lower()), None)
     if specific:
         return specific['resource'] + ': ' + specific['reason']
     return current[0]['reason'] if current else (failure['reason'] or 'Inspect stack-failure.json and CloudFormation events')
@@ -300,18 +301,20 @@ class Delivery(Audit):
 
     def safe_pause(self):
         terminal = self.wait_stack(1200)
-        require(terminal['StackStatus'] in ('CREATE_COMPLETE', 'UPDATE_COMPLETE', 'UPDATE_ROLLBACK_COMPLETE'),
+        require(terminal['StackStatus'] in ('CREATE_COMPLETE', 'UPDATE_COMPLETE', 'UPDATE_ROLLBACK_COMPLETE', 'UPDATE_ROLLBACK_FAILED'),
                 'Unexpected stack terminal state; pause needs operator review')
         self.preflight_for_pause()
         return self.pause()
 
     def preflight_for_pause(self):
-        # Rollback-complete can still have usable outputs and need cost control.
+        # A stopped failed rollback also needs cost control. This authorizes
+        # only a bound, queue-drained capacity reduction, never release/recovery.
         status = self.stack()['StackStatus']
-        if status == 'UPDATE_ROLLBACK_COMPLETE':
+        if status in ('UPDATE_ROLLBACK_COMPLETE', 'UPDATE_ROLLBACK_FAILED'):
             identity = self.aws('sts', 'get-caller-identity')
             require(identity['Account'] == self.args.account and not identity['Arn'].endswith(':root'), 'Unexpected cleanup identity')
             stack = self.stack()
+            require(stack['StackStatus'] == status, 'Stack status changed during cleanup preflight')
             self.outputs = {p['OutputKey']: p['OutputValue'] for p in stack['Outputs']}
             resources = self.aws('cloudformation', 'describe-stack-resources', '--stack-name', self.args.stack)['StackResources']
             self.resources = {r['LogicalResourceId']: r['PhysicalResourceId'] for r in resources}

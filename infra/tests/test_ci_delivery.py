@@ -311,5 +311,31 @@ class DeliveryTests(unittest.TestCase):
         self.assertEqual(delivery.stack_failure_detail(failure),'Resources failed: ApiRole, WorkerRole')
         self.assertIn('Inspect stack-failure.json',delivery.stack_failure_detail(delivery.stack_failure_summary(stack,[])))
 
+    def test_failed_rollback_detail_excludes_stack_summary_and_cancelled_sibling(self):
+        events = [
+            {'ResourceStatus':'UPDATE_ROLLBACK_FAILED','ResourceStatusReason':'Resources failed: ApiGroup, WorkerGroup','LogicalResourceId':'stack'},
+            {'ResourceStatus':'UPDATE_FAILED','ResourceStatusReason':'Resource update cancelled','LogicalResourceId':'WorkerGroup'},
+            {'ResourceStatus':'UPDATE_FAILED','ResourceStatusReason':'Not authorized to use launch template','LogicalResourceId':'ApiGroup'},
+            {'ResourceStatus':'UPDATE_ROLLBACK_IN_PROGRESS','ResourceStatusReason':'Initial failure summary','LogicalResourceId':'stack'}]
+        failure = delivery.stack_failure_summary({'StackStatus':'UPDATE_ROLLBACK_FAILED'},events)
+        self.assertEqual(delivery.stack_failure_detail(failure),'ApiGroup: Not authorized to use launch template')
+
+    def test_failed_rollback_cleanup_binds_identity_and_fleets_before_pause(self):
+        audit = delivery.Delivery(SimpleNamespace(account='683146427271',stack='prashn-cloud-v2',region='us-east-1',command='pause'))
+        audit.directory = self.folder
+        stack = {'StackStatus':'UPDATE_ROLLBACK_FAILED','Outputs':[{'OutputKey':k,'OutputValue':v} for k,v in [('ApiGroup','api'),('WorkerGroup','worker')]]}
+        rows = {'StackResources':[{'LogicalResourceId':k,'PhysicalResourceId':v} for k,v in [('ApiGroup','api'),('WorkerGroup','worker')]]}
+        with patch.object(audit,'wait_stack',return_value=stack), patch.object(audit,'stack',return_value=stack), \
+             patch.object(audit,'aws',side_effect=[{'Account':'683146427271','Arn':'arn:aws:iam::683146427271:user/prashn-admin'},rows]), \
+             patch.object(audit,'pause',return_value='paused') as pause:
+            self.assertEqual(audit.safe_pause(),'paused')
+            pause.assert_called_once()
+        rows['StackResources'][0]['PhysicalResourceId']='unrelated'
+        with patch.object(audit,'wait_stack',return_value=stack), patch.object(audit,'stack',return_value=stack), \
+             patch.object(audit,'aws',side_effect=[{'Account':'683146427271','Arn':'arn:aws:iam::683146427271:user/prashn-admin'},rows]), \
+             patch.object(audit,'pause') as pause:
+            with self.assertRaises(AssertionError):audit.safe_pause()
+            pause.assert_not_called()
+
 
 if __name__ == '__main__': unittest.main()
