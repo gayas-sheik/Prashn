@@ -53,6 +53,14 @@ The final output prints the exact paths. Partial reports say **IN PROGRESS**; th
 
 Eight readable fixtures plus one corrupt PDF create **nine test document records**, with two retries. The script creates two fresh test accounts; these accounts, minimal deletion tombstones and activity remain under current policy because no account-deletion API exists. It never purges other users, scans customer records, reads the SSM signing secret, inserts arbitrary queue messages, stops a busy worker for a fault test or purchases services.
 
+## Code-release acceptance scope
+
+Approved delivery uses `bash verify.sh --scope code-release --expected-release <full-commit> --pause-after`. This retains required configuration, exact backend revision, frontend/target checks, authentication/isolation, processing/OCR/Q&A/history, logs, test-document cleanup, and zero-capacity pause. It checks the API target-tracking policy configuration but reports actual automatic scale-out as **NOT TESTED**, outside this release scope. It runs no scaling load test and makes no claim that scaling behavior was verified.
+
+The default `--scope deployment` still requires an actual policy-triggered API 1-to-2 launch in the last 20 scaling activities. Historical activity can fall out of that bounded window after later fleet operations. A missing event therefore blocks deployment-scope acceptance, even when every application check passes. Code-release scope requires both an exact `--expected-release` and `--pause-after`; it does not turn failed or blocked required checks into success.
+
+Approved delivery #10 for `0bda320` demonstrated this distinction: the owner's supplied verification log reports UPDATE_COMPLETE, matching cloud release and published frontend, passing functional checks, and both fleets paused at zero, but its final verdict was BLOCKED solely on missing recent automatic scale-out evidence. This is owner-provided log evidence, not a new rendered browser/scaling check. The workflow now explicitly selects code-release acceptance for future code updates.
+
 ## Verdict and limits
 
 - **FAIL**: an executed check disagreed with the expected result.

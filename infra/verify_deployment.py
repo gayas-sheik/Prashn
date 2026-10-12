@@ -121,6 +121,13 @@ def fixtures():
 class Audit:
     def __init__(self, args):
         self.args = args
+        self.acceptance_scope = getattr(args, 'acceptance_scope', 'deployment')
+        require(self.acceptance_scope in ('deployment', 'code-release'), 'Unknown acceptance scope')
+        self.scope = ('Code-release acceptance: exact release, core application, configuration and cleanup checks; '
+                      'automatic scale-out history is outside this scope; not full scaling/browser/security certification'
+                      if self.acceptance_scope == 'code-release' else
+                      'Core cloud deployment acceptance including observed API automatic scale-out; '
+                      'not complete production/security/browser certification')
         self.started = datetime.now(timezone.utc)
         self.deadline = time.monotonic() + 900
         self.checks, self.documents = [], {}
@@ -372,11 +379,15 @@ class Audit:
                         'API ingress is not restricted to its ALB on port 5000')
         return 'No public workload ingress; API admits only its ALB, worker has no ingress'
 
-    def scaling(self):
+    def scaling_policy(self):
         policies = self.aws('autoscaling', 'describe-policies', '--auto-scaling-group-name', self.outputs['ApiGroup'])['ScalingPolicies']
         require(any(p.get('TargetTrackingConfiguration', {}).get('TargetValue') == 100
                     and p['TargetTrackingConfiguration'].get('PredefinedMetricSpecification', {}).get('PredefinedMetricType') == 'ALBRequestCountPerTarget' for p in policies),
                 'Expected API request target-tracking policy missing')
+        return 'Expected ALBRequestCountPerTarget target-tracking policy with target 100 inspected; scale-out behavior is a separate check'
+
+    def scaling(self):
+        self.scaling_policy()
         activities = self.aws('autoscaling', 'describe-scaling-activities', '--auto-scaling-group-name', self.outputs['ApiGroup'], '--max-records', '20', '--no-paginate')['Activities']
         matches = [a for a in activities if 'monitor alarm' in a.get('Cause', '')
                    and 'changing the desired capacity from 1 to 2' in a['Cause']
@@ -710,9 +721,14 @@ class Audit:
         if not self.check('Account and completed stack', self.preflight):
             return
         for name, action in [('Private encrypted S3', self.bucket_security), ('DynamoDB and SQS configuration', self.database_queue),
-                             ('Workload ingress isolation', self.security_groups), ('Workload IAM/launch/API cache configuration', self.workload_configuration),
-                             ('Observed API automatic scale-out', self.scaling)]:
+                             ('Workload ingress isolation', self.security_groups), ('Workload IAM/launch/API cache configuration', self.workload_configuration)]:
             self.check(name, action)
+        if self.acceptance_scope == 'code-release':
+            self.check('API target-tracking configuration', self.scaling_policy)
+            self.record('Observed API automatic scale-out', 'NOT TESTED',
+                        'Outside code-release acceptance: no scaling load test or historical launch claim; use deployment scope for scaling evidence', False)
+        else:
+            self.check('Observed API automatic scale-out', self.scaling)
         if not self.check('Current credit/plan snapshot', self.credits):
             if self.args.pause_after:
                 self.deadline = time.monotonic() + 390
@@ -777,6 +793,8 @@ def main():
     parser.add_argument('--pause-after', action='store_true', help='After tests/cleanup, pause both stack fleets only once API admission closes and queue drains')
     parser.add_argument('--resume-for-test', action='store_true', help='Explicitly resume paused stack fleets with desired 1/max 2; requires --pause-after')
     parser.add_argument('--expected-release', help='Require health to match the full CI-tested Git revision')
+    parser.add_argument('--scope', dest='acceptance_scope', choices=('deployment', 'code-release'), default='deployment',
+                        help='deployment requires historical API scale-out evidence; code-release checks configuration and core release behavior without a load test')
     args = parser.parse_args()
     if not re.fullmatch(r'\d{12}', args.account) or not re.fullmatch(r'[a-z][a-z0-9-]{2,24}', args.stack) or not re.fullmatch(r'[a-z]{2}-[a-z]+-\d', args.region):
         parser.error('Use a 12-digit account, a 3-25-character lowercase stack name and a valid region')
@@ -784,6 +802,8 @@ def main():
         parser.error('--resume-for-test requires --pause-after under the demo-only cost policy')
     if args.expected_release and not re.fullmatch('[a-f0-9]{40}', args.expected_release):
         parser.error('--expected-release must be a full 40-character Git revision')
+    if args.acceptance_scope == 'code-release' and (not args.expected_release or not args.pause_after):
+        parser.error('--scope code-release requires --expected-release and --pause-after')
     audit = Audit(args)
     print('Bounded verification: no stack provisioning or load test. Explicit resume can launch fleet instances. Hold off on other uploads when using --pause-after.', flush=True)
     try:

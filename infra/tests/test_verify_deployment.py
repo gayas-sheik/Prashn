@@ -7,6 +7,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import tempfile
 import threading
+import sys
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -17,9 +18,11 @@ spec.loader.exec_module(verify)
 
 
 class VerificationTests(unittest.TestCase):
-    def make_audit(self):
+    def make_audit(self, **options):
         # Temporary cwd keeps ignored generated reports isolated from real runs.
-        audit = verify.Audit(SimpleNamespace(account='123456789012', stack='prashn-test', region='us-east-1', pause_after=True, resume_for_test=False))
+        args = dict(account='123456789012', stack='prashn-test', region='us-east-1', pause_after=True, resume_for_test=False)
+        args.update(options)
+        audit = verify.Audit(SimpleNamespace(**args))
         audit.directory = Path(self.temp.name) / 'report'
         audit.directory.mkdir(exist_ok=True)
         return audit
@@ -36,6 +39,85 @@ class VerificationTests(unittest.TestCase):
         self.assertEqual(verify.verdict([c('BLOCKED'), c('VERIFIED')]), 'BLOCKED')
         self.assertEqual(verify.verdict([c('VERIFIED'), c('NOT TESTED', False)]), 'PASS WITH LIMITATIONS')
         self.assertEqual(verify.verdict([c('VERIFIED')]), 'PASS')
+
+    def prepare_core_run(self, audit):
+        # Isolate orchestration; individual transport/safety tests below exercise real helpers.
+        methods = ('preflight', 'bucket_security', 'database_queue', 'security_groups', 'workload_configuration',
+                   'credits', 'active_groups', 'health', 'frontend', 'target_health', 'register', 'protection',
+                   'invalid_uploads', 'concurrent_uploads', 'isolation', 'questions', 'retry', 'single_fixture',
+                   'corrupt', 'listing_activity', 'logs', 'logout', 'cleanup', 'pause')
+        for method in methods:
+            setattr(audit, method, lambda *_args, **_kwargs: 'Fixture observation')
+        audit.primary = 'DOC-fixture'
+        audit.documents = {'DOC-fixture': {}}
+        audit.tokens = {'A': 'fixture'}
+        audit.outputs = {'ApiGroup': 'api'}
+        def aws(service, operation, *_args, **_kwargs):
+            self.assertEqual((service, operation), ('autoscaling', 'describe-policies'))
+            return {'ScalingPolicies': [{'TargetTrackingConfiguration': {
+                'TargetValue': 100, 'PredefinedMetricSpecification': {'PredefinedMetricType': 'ALBRequestCountPerTarget'}}}]}
+        audit.aws = aws
+
+    def test_code_release_does_not_require_scale_history_but_preserves_core_checks(self):
+        audit = self.make_audit(acceptance_scope='code-release', expected_release='a' * 40)
+        self.prepare_core_run(audit)
+        audit.scaling = lambda: self.fail('Code release must not claim historical scaling evidence')
+        with contextlib.redirect_stdout(io.StringIO()):
+            audit.run()
+        self.assertEqual(verify.verdict(audit.checks), 'PASS WITH LIMITATIONS')
+        checks = {c['name']: c for c in audit.checks}
+        self.assertEqual(checks['Observed API automatic scale-out']['status'], 'NOT TESTED')
+        self.assertFalse(checks['Observed API automatic scale-out']['required'])
+        for name in ('API target-tracking configuration', 'Cloud API health and release', 'Two-user/document isolation',
+                     'Grounded Q&A and persisted history', 'Actual worker CloudWatch completion logs',
+                     'Test-document deletion/storage/history cleanup', 'Demo-only compute pause'):
+            self.assertTrue(checks[name]['required'], name)
+            self.assertEqual(checks[name]['status'], 'VERIFIED', name)
+        audit.finished = True
+        audit.save()
+        report = json.loads((audit.directory / 'report.json').read_text())
+        self.assertIn('automatic scale-out history is outside this scope', report['scope'])
+
+    def test_default_deployment_still_blocks_without_scale_history(self):
+        audit = self.make_audit()
+        self.prepare_core_run(audit)
+        audit.aws = lambda service, operation, *_args, **_kwargs: (
+            {'ScalingPolicies': [{'TargetTrackingConfiguration': {'TargetValue': 100,
+                'PredefinedMetricSpecification': {'PredefinedMetricType': 'ALBRequestCountPerTarget'}}}]}
+            if operation == 'describe-policies' else {'Activities': []})
+        with contextlib.redirect_stdout(io.StringIO()):
+            audit.run()
+        self.assertEqual(verify.verdict(audit.checks), 'BLOCKED')
+        scaling = next(c for c in audit.checks if c['name'] == 'Observed API automatic scale-out')
+        self.assertEqual(scaling['status'], 'BLOCKED')
+        self.assertTrue(scaling['required'])
+        self.assertIn('last 20 activities', scaling['evidence'])
+
+    def test_code_release_cannot_pass_missing_scaling_policy_or_broken_isolation(self):
+        for failure in ('policy', 'isolation'):
+            with self.subTest(failure=failure):
+                audit = self.make_audit(acceptance_scope='code-release', expected_release='a' * 40)
+                self.prepare_core_run(audit)
+                if failure == 'policy':
+                    audit.aws = lambda *_args, **_kwargs: {'ScalingPolicies': []}
+                else:
+                    def denied():
+                        raise AssertionError('Cross-account document unexpectedly accessible')
+                    audit.isolation = denied
+                with contextlib.redirect_stdout(io.StringIO()):
+                    audit.run()
+                self.assertEqual(verify.verdict(audit.checks), 'FAIL')
+                self.assertEqual(audit.checks[-1]['name'], 'Demo-only compute pause')
+                self.assertEqual(audit.checks[-1]['status'], 'VERIFIED')
+
+    def test_code_release_cli_requires_exact_revision_and_pause_before_aws(self):
+        for extra in ([], ['--expected-release', 'a' * 40], ['--pause-after']):
+            with self.subTest(extra=extra), patch.object(sys, 'argv', ['verify_deployment.py', '--account',
+                    '123456789012', '--scope', 'code-release', *extra]), patch.object(verify, 'Audit') as audit:
+                with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
+                    verify.main()
+                self.assertEqual(error.exception.code, 2)
+                audit.assert_not_called()
 
     def test_wrong_account_stops_before_any_workload_call(self):
         audit = self.make_audit()

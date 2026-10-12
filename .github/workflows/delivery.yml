@@ -65,7 +65,7 @@ jobs:
       - name: Deliver only the CI-tested code artifact
         run: python3 infra/cd_release.py deploy --account "$EXPECTED_ACCOUNT" --revision "$EXPECTED_RELEASE"
       - name: Verify new release and pause after acceptance
-        run: bash verify.sh --expected-release "$EXPECTED_RELEASE" --pause-after
+        run: bash verify.sh --scope code-release --expected-release "$EXPECTED_RELEASE" --pause-after
       - name: Retain sanitized delivery and acceptance evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
