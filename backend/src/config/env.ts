@@ -43,6 +43,7 @@ export const config = {
   documentBucket: process.env.DOCUMENT_BUCKET || '',
   dynamodbTable: process.env.DYNAMODB_TABLE || '',
   queueUrl: process.env.PROCESSING_QUEUE_URL || '',
+  monitoringStack: process.env.MONITORING_STACK_NAME || '',
   jobLeaseSeconds: 120,
   workerMaxAttempts: 5,
   release: process.env.APP_RELEASE || 'development',

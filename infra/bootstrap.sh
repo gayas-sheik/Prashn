@@ -20,6 +20,7 @@ if not secret or '\n' in secret: raise RuntimeError('Invalid private signing sec
 values={'NODE_ENV':'production','PORT':'5000','JWT_SECRET':secret,'JWT_EXPIRES_IN':'1d','CORS_ORIGIN':'same-origin',
     'STORAGE_MODE':'s3','DATABASE_MODE':'dynamodb','PROCESSING_MODE':'sqs','PROCESSING_CONCURRENCY':'1','MAX_DOCUMENT_PAGES':'100','OCR_LANGUAGE':'eng','OCR_MODE':'auto','OLLAMA_MODEL':''}
 values.update({key:os.environ[key] for key in ['AWS_REGION','DOCUMENT_BUCKET','DYNAMODB_TABLE','PROCESSING_QUEUE_URL']})
+values['MONITORING_STACK_NAME']=os.environ['STACK_NAME']
 import json
 values['APP_RELEASE']=json.load(open('/opt/prashn/.aws-build/release-manifest.json'))['revision']
 fd=os.open('.env',os.O_WRONLY|os.O_CREAT|os.O_TRUNC,0o600)

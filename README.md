@@ -38,6 +38,7 @@ An ID image or PDF can undergo the same text extraction and supported field matc
 - [AWS migration and automation](docs/aws-migration.md): implemented cloud adapters, durable workers, deployment script, cost review and live rollout checklist.
 - [One-command cloud verification](docs/cloud-acceptance.md): bounded deployment checks, test-document cleanup, explicit demo resume/pause and an evidence-based verdict.
 - [CI and approved cloud delivery](docs/ci-cd.md): automatic GitHub checks, one-time AWS permission setup, manual releases, version verification and compute pause.
+- [Administrator monitoring](docs/monitoring.md): CloudWatch monitoring page, access controls, reviewed read-permission setup and activation/validation status.
 - [Cloud browser verification](docs/cloud-browser-test-report.md): executed Chrome upload/OCR/Q&A/download/mobile checks, discovered UI defects, and verified final compute pause on 12 October 2026.
 - [Browser defect fixes](docs/browser-fixes-test-report.md): local corrections, regression checks, owner-confirmed PDF navigation, and remaining cloud release verification.
 - [Evaluation and browser verification](docs/synthetic-evaluation-report.md): before/after measurements, tested browser flows and verification limits.

@@ -10,6 +10,7 @@ import { DocumentDetailsPage } from '../pages/DocumentDetails/DocumentDetailsPag
 import { DocumentQAPage } from '../pages/DocumentQA/DocumentQAPage';
 import { ActivityPage } from '../pages/Activity/ActivityPage';
 import { SettingsPage } from '../pages/Settings/SettingsPage';
+import { MonitoringPage } from '../pages/Monitoring/MonitoringPage';
 
 export const AppRoutes: React.FC = () => {
   return (
@@ -26,6 +27,7 @@ export const AppRoutes: React.FC = () => {
         <Route path="/upload" element={<UploadPage />} />
         <Route path="/processing" element={<ProcessingPage />} />
         <Route path="/activity" element={<ActivityPage />} />
+        <Route path="/monitoring" element={<MonitoringPage />} />
         <Route path="/settings" element={<SettingsPage />} />
       </Route>
 

@@ -9,7 +9,8 @@ import {
   Settings, 
   X,
   Layers,
-  ShieldCheck
+  ShieldCheck,
+  Activity
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -29,6 +30,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({ open, onClose }) => {
     { label: 'Upload Documents', path: '/upload', icon: UploadCloud },
     { label: 'Processing Queue', path: '/processing', icon: Cpu },
     { label: 'Activity & Audit Log', path: '/activity', icon: Clock },
+    ...(user?.role === 'admin' ? [{ label: 'Monitoring', path: '/monitoring', icon: Activity }] : []),
     { label: 'Settings', path: '/settings', icon: Settings },
   ];
 

@@ -6,6 +6,7 @@ import authRoutes from './routes/auth.routes';
 import documentRoutes from './routes/document.routes';
 import activityRoutes from './routes/activity.routes';
 import questionRoutes from './routes/question.routes';
+import monitoringRoutes from './routes/monitoring.routes';
 import multer from 'multer';
 import path from 'path';
 import { log } from './observability/log';
@@ -35,6 +36,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/documents', documentRoutes);
 app.use('/api/documents', questionRoutes); // For /api/documents/:id/questions
 app.use('/api/activity', activityRoutes);
+app.use('/api/monitoring', monitoringRoutes);
 
 // Error handling middleware
 app.use((err: any, req: express.Request, res: express.Response, _next: express.NextFunction) => {

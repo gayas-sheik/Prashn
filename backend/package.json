@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "npm run build && node --test tests/workflow.test.cjs tests/question-language.test.cjs tests/final-audit-faults.cjs",
+    "test": "npm run build && node --test tests/workflow.test.cjs tests/question-language.test.cjs tests/final-audit-faults.cjs tests/monitoring.test.cjs",
     "audit:local": "npm run build && node tests/final-audit.cjs",
     "dev": "nodemon --watch src --ext ts --exec \"npm run dev:server\"",
     "dev:server": "npm run build && node dist/server.js",
@@ -19,6 +19,10 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@aws-sdk/client-auto-scaling": "3.1149.0",
+    "@aws-sdk/client-cloudformation": "3.1149.0",
+    "@aws-sdk/client-cloudwatch": "3.1149.0",
+    "@aws-sdk/client-cloudwatch-logs": "3.1149.0",
     "@aws-sdk/client-dynamodb": "^3.1148.0",
     "@aws-sdk/client-s3": "^3.1148.0",
     "@aws-sdk/client-sqs": "^3.1148.0",

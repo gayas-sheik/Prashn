@@ -12,6 +12,7 @@ import re
 from types import SimpleNamespace
 
 from verify_deployment import Audit, Blocked, require
+from monitoring_policy import monitoring_policy, with_monitoring_boundary
 
 SUBJECT_PREFIX = 'repo:gayas-sheik@144677471/Prashn@1409380811'
 TRUSTED_BRANCH = 'aws-migration-preparation'
@@ -164,6 +165,8 @@ class Setup(Audit):
         b['groupArns'] = [g['AutoScalingGroupARN'] for g in groups]
         b['alarmArns'] = [f'arn:aws:cloudwatch:{region}:{account}:alarm:' + self.resources[k] for k in ('QueueBacklog', 'QueueIdle')]
         b['alarmArns'].append(f'arn:aws:cloudwatch:{region}:{account}:alarm:TargetTracking-' + self.outputs['ApiGroup'] + '-*')
+        b['monitorAlarmArns'] = [f'arn:aws:cloudwatch:{region}:{account}:alarm:' + self.resources[k]
+                                for k in ('QueueBacklog', 'QueueIdle', 'DeadLetterAlarm', 'ApiErrors')]
         b['roleArns'] = [f'arn:aws:iam::{account}:role/{self.resources[k+"Role"]}' for k in ('Api','Worker')]
         b['profileArns'] = [f'arn:aws:iam::{account}:instance-profile/{self.resources[k+"Profile"]}' for k in ('Api','Worker')]
         b['boundaryArns'] = [f'arn:aws:iam::{account}:policy/{self.args.stack}-{k.lower()}-boundary' for k in ('Api','Worker')]
@@ -183,7 +186,13 @@ class Setup(Audit):
             boundary = role.get('PermissionsBoundary', {}).get('PermissionsBoundaryArn')
             require(boundary in (None, b['boundaryArns'][index]), 'An existing different workload boundary must not be overwritten')
             inline = self.aws('iam', 'get-role-policy', '--role-name', name, '--policy-name', 'workload')['PolicyDocument']
-            self.write(prefix.lower() + '-boundary.json', permission_boundary(inline, core, p['ArtifactBucket'], allowed))
+            document = permission_boundary(inline, core, p['ArtifactBucket'], allowed)
+            if prefix == 'Api' and 'monitoring-read' in self.aws('iam', 'list-role-policies', '--role-name', name)['PolicyNames']:
+                approved_monitoring = monitoring_policy(b)
+                observed = self.aws('iam', 'get-role-policy', '--role-name', name, '--policy-name', 'monitoring-read')['PolicyDocument']
+                require(observed == approved_monitoring, 'Existing monitoring policy differs from the reviewed stack read contract')
+                document = with_monitoring_boundary(document, approved_monitoring)
+            self.write(prefix.lower() + '-boundary.json', document)
         self.write('trust.json', trust_policy(account))
         self.write('permissions.json', deployment_policy(b))
         self.write('bindings.json', b)
