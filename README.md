@@ -38,6 +38,8 @@ An ID image or PDF can undergo the same text extraction and supported field matc
 - [AWS migration and automation](docs/aws-migration.md): implemented cloud adapters, durable workers, deployment script, cost review and live rollout checklist.
 - [One-command cloud verification](docs/cloud-acceptance.md): bounded deployment checks, test-document cleanup, explicit demo resume/pause and an evidence-based verdict.
 - [CI and approved cloud delivery](docs/ci-cd.md): automatic GitHub checks, one-time AWS permission setup, manual releases, version verification and compute pause.
+- [Cloud browser verification](docs/cloud-browser-test-report.md): executed Chrome upload/OCR/Q&A/download/mobile checks, discovered UI defects, and verified final compute pause on 12 October 2026.
+- [Browser defect fixes](docs/browser-fixes-test-report.md): local corrections, regression checks, owner-confirmed PDF navigation, and remaining cloud release verification.
 - [Evaluation and browser verification](docs/synthetic-evaluation-report.md): before/after measurements, tested browser flows and verification limits.
 - [Earlier validation history](docs/local-mvp-test-report.md): repair history and regression coverage.
 - [Final local MVP audit](docs/local-mvp-final-audit.md): independent acceptance evidence, repairs, remaining limitations and migration readiness.
@@ -103,6 +105,7 @@ npm test
 From the repository root:
 
 ~~~bash
+npm test
 npm run build
 npm run lint
 ~~~
@@ -115,7 +118,9 @@ npm run evaluate
 
 The benchmark requires Python with reportlab and Pillow, plus the Windows Arial font used by the generator. See [evaluation instructions](backend/tests/evaluation/README.md).
 
-Latest independent audit on 9 October 2026: 35 backend regression cases and 17 separate acceptance checks passed; the nine-document synthetic benchmark passed 72 expected-field checks and 73 Q&A checks, including 61 positive citation checks and 12 missing-evidence refusals. Frontend build and lint passed; lint reported 11 warnings and no errors. Interactive browser verification was blocked in this pass. Earlier Brave observations are preserved in the evaluation report and were not independently repeated here.
+Local browser defect validation on 12 October 2026: 4 frontend search tests, 36 backend regression tests, and 56 infrastructure/workflow safety tests passed. Production build and lint passed with 10 remaining warnings and zero errors. Chrome verified vendor/invoice/full-text search and measured activity cards; the owner confirmed the embedded PDF displayed page 2 correctly. These checks preceded publication and deployment. See the [fix report](docs/browser-fixes-test-report.md) for evidence and limits.
+
+Independent audit on 9 October 2026: 35 backend regression cases and 17 separate acceptance checks passed; the nine-document synthetic benchmark passed 72 expected-field checks and 73 Q&A checks, including 61 positive citation checks and 12 missing-evidence refusals. Frontend build and lint passed; lint reported 11 warnings and no errors. Interactive browser verification was blocked in that pass. Earlier Brave observations are preserved in the evaluation report and were not independently repeated there.
 
 These are results for the tested fixtures and flows, not an estimate of accuracy on arbitrary real documents. Runtime databases, private uploads and generated test artifacts remain ignored.
 
@@ -127,6 +132,6 @@ After updating a compiled backend, rebuild and restart it. Existing documents ne
 
 ## Optional AWS deployment
 
-AWS is an optional hosting and integration path. S3 storage, DynamoDB repositories, SQS workers and CloudFormation deployment automation are implemented in the [migration guide](docs/aws-migration.md), with 18 passing local emulator cases and a later [owner-run core live acceptance](docs/aws-migration-test-report.md#completed-owner-run-live-acceptance---10-october-2026): PASS WITH LIMITATIONS, 41 verified entries and zero failed/blocked. Controlled auth/isolation, native/OCR processing, Q&A/history, failure/retry, deletion and completion logs passed; actual automatic API scale-out reported Successful. CI/CD, rendered cloud-browser review, worker scaling/scale-in and broader recovery/restore/security cases remain pending. Cognito and Textract are not implemented; the deployment retains existing authentication and PDF/OCR extraction. The [architecture guide](docs/aws-architecture.md) preserves the larger proposed serverless design separately.
+AWS is an optional hosting and integration path. S3 storage, DynamoDB repositories, SQS workers and CloudFormation deployment automation are implemented in the [migration guide](docs/aws-migration.md), with 18 passing local emulator cases and a later [owner-run core live acceptance](docs/aws-migration-test-report.md#completed-owner-run-live-acceptance---10-october-2026): PASS WITH LIMITATIONS, 41 verified entries and zero failed/blocked. Controlled auth/isolation, native/OCR processing, Q&A/history, failure/retry, deletion and completion logs passed; actual automatic API scale-out reported Successful. The owner supplied a successful approved-delivery #8 screenshot for `d701698`. [Chrome verification on 12 October](docs/cloud-browser-test-report.md) independently matched that deployed revision and passed the executed core browser flows, while finding search, embedded PDF page-navigation, cloud-label, and audit-metric defects. Both fleets were verified paused at zero afterward. Worker scaling/scale-in and broader recovery/restore/security cases remain pending. Cognito and Textract are not implemented; the deployment retains existing authentication and PDF/OCR extraction. The [architecture guide](docs/aws-architecture.md) preserves the larger proposed serverless design separately.
 
 The existing application was manually deployed to EC2 on 10 October 2026 at [the Prashn HTTPS website](https://prashn.98-81-180-63.sslip.io/), retaining SQLite, filesystem storage and local PDF/OCR processing. See the [deployment record](docs/ec2-deployment.md) for evidence, maintenance and limitations. This hosting deployment does not implement the proposed managed-service migration; its address depends on the current instance public IP.

@@ -91,7 +91,7 @@ export const TopNav: React.FC<TopNavProps> = ({ onOpenMobileMenu }) => {
         {/* Global OCR Pipeline indicator */}
         <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-[4px] bg-[#F1F5F9] dark:bg-[#162032] border border-[#E2E8F0] dark:border-[#334155] text-[11px] font-mono text-[#475569] dark:text-[#94A3B8]">
           <span className="w-1.5 h-1.5 rounded-full bg-[#059669]" />
-          <span>Local Document Workspace</span>
+          <span>Document Workspace</span>
         </div>
 
         {/* Theme Selector Dropdown */}

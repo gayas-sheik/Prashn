@@ -154,7 +154,7 @@ export const DocumentTable: React.FC<DocumentTableProps> = ({
                   {/* Processing Duration */}
                   <td className="px-3">
                     <span className="font-mono text-[12px] text-[#64748B] dark:text-[#94A3B8] tabular-nums">
-                      {doc.processingDuration || '< 1s'}
+                      {doc.processingDuration || '—'}
                     </span>
                   </td>
 

@@ -8,14 +8,16 @@ import {
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
-import type { ActivityEvent } from '../../types';
+import type { ActivityEvent, DocumentMetrics } from '../../types';
 import { PipelineHealthCard } from '../../components/dashboard/PipelineHealthCard';
-import { getActivityEvents } from '../../services/api/documentService';
+import { getActivityEvents, getDocumentMetrics } from '../../services/api/documentService';
 
 export const ActivityPage: React.FC = () => {
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [metrics, setMetrics] = useState<DocumentMetrics | null>(null);
+  const [metricsError, setMetricsError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedEventType, setSelectedEventType] = useState('All');
   const [selectedStatus, setSelectedStatus] = useState('All');
@@ -24,22 +26,28 @@ export const ActivityPage: React.FC = () => {
   const [selectedLogJson, setSelectedLogJson] = useState<Record<string, any> | null>(null);
 
   useEffect(() => {
+    let disposed = false;
     const fetchEvents = async () => {
       try {
-        const data = await getActivityEvents();
-        setEvents(data);
-        setError('');
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Unable to load activity');
+        const [activity, documents] = await Promise.allSettled([getActivityEvents(), getDocumentMetrics()]);
+        if (disposed) return;
+        if (activity.status === 'fulfilled') { setEvents(activity.value); setError(''); }
+        else setError(activity.reason instanceof Error ? activity.reason.message : 'Unable to load activity');
+        if (documents.status === 'fulfilled') { setMetrics(documents.value); setMetricsError(''); }
+        else { setMetrics(null); setMetricsError('Document metrics are unavailable.'); }
       } finally {
-        setLoading(false);
+        if (!disposed) setLoading(false);
       }
     };
-    fetchEvents();
-    if (!liveStreamActive) return;
-    const interval = setInterval(fetchEvents, 3000);
-    return () => clearInterval(interval);
+    void fetchEvents();
+    const interval = liveStreamActive ? setInterval(fetchEvents, 3000) : undefined;
+    return () => { disposed = true; if (interval) clearInterval(interval); };
   }, [liveStreamActive]);
+
+  const finishedDocuments = metrics ? metrics.completed + metrics.failed : 0;
+  const flaggedEvents = events.filter(event => event.status === 'Failed' || event.status === 'Warning').length;
+  const eventTypes = [...new Set(events.map(event => event.event))].sort();
+  const actors = [...new Set(events.map(event => event.actor))].sort();
 
   const filteredEvents = events.filter((e) => {
     const matchesSearch =
@@ -48,9 +56,9 @@ export const ActivityPage: React.FC = () => {
       e.actor.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (e.documentId && e.documentId.toLowerCase().includes(searchQuery.toLowerCase()));
 
-    const matchesType = selectedEventType === 'All' ? true : e.event.includes(selectedEventType);
+    const matchesType = selectedEventType === 'All' || e.event === selectedEventType;
     const matchesStatus = selectedStatus === 'All' ? true : e.status === selectedStatus;
-    const matchesNode = selectedNode === 'All' ? true : e.actor.includes(selectedNode);
+    const matchesNode = selectedNode === 'All' || e.actor === selectedNode;
 
     return matchesSearch && matchesType && matchesStatus && matchesNode;
   });
@@ -102,6 +110,7 @@ export const ActivityPage: React.FC = () => {
   return (
     <div className="space-y-6">
       {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
+      {metricsError && <p role="alert" className="text-sm text-red-600">{metricsError}</p>}
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-[#E2E8F0] dark:border-[#334155]">
         <div>
@@ -133,7 +142,7 @@ export const ActivityPage: React.FC = () => {
             icon={<Download className="w-3.5 h-3.5" />}
             onClick={() => handleExport('csv')}
           >
-            Export CSV / JSON
+            Export CSV
           </Button>
         </div>
       </div>
@@ -142,7 +151,7 @@ export const ActivityPage: React.FC = () => {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white dark:bg-[#1E293B] border border-[#E2E8F0] dark:border-[#334155] rounded-[6px] p-4">
           <div className="text-[12px] font-medium text-[#64748B] dark:text-[#94A3B8] mb-1">
-            Events in Period
+            Recorded Events
           </div>
           <div className="flex items-baseline justify-between">
             <span className="text-[26px] font-bold text-[#0F172A] dark:text-[#F8FAFC] tabular-nums">
@@ -155,43 +164,43 @@ export const ActivityPage: React.FC = () => {
 
         <div className="bg-white dark:bg-[#1E293B] border border-[#E2E8F0] dark:border-[#334155] rounded-[6px] p-4">
           <div className="text-[12px] font-medium text-[#64748B] dark:text-[#94A3B8] mb-1">
-            Ingestion Success
+            Document Success
           </div>
           <div className="flex items-baseline justify-between">
             <span className="text-[26px] font-bold text-[#059669] dark:text-[#34D399] tabular-nums">
-              {events.length > 0 ? Math.round((events.filter(e => e.status !== 'Failed').length / events.length) * 100) : 0}%
+              {metrics && finishedDocuments ? `${Math.round(metrics.completed / finishedDocuments * 100)}%` : '—'}
             </span>
-            <Badge variant="success">Healthy</Badge>
+            <Badge variant={metrics?.failed ? 'warning' : 'neutral'}>{!finishedDocuments ? 'No results' : metrics?.failed ? 'Needs review' : 'No failures'}</Badge>
           </div>
-          <div className="text-[11px] text-[#64748B] mt-1 font-mono">{events.filter(e => e.status !== 'Failed').length} / {events.length} passed</div>
+          <div className="text-[11px] text-[#64748B] mt-1 font-mono">{metrics ? `${metrics.completed} completed / ${finishedDocuments} finished documents` : 'No document measurements'}</div>
         </div>
 
         <div className="bg-white dark:bg-[#1E293B] border border-[#E2E8F0] dark:border-[#334155] rounded-[6px] p-4">
           <div className="text-[12px] font-medium text-[#64748B] dark:text-[#94A3B8] mb-1">
-            Avg Processing Latency
+            Avg Processing Time
           </div>
           <div className="flex items-baseline justify-between">
             <span className="text-[26px] font-bold text-[#0F172A] dark:text-[#F8FAFC] tabular-nums">
-              {"< 1s"}
+              {metrics?.averageProcessingSeconds == null ? '—' : `${metrics.averageProcessingSeconds.toFixed(2)}s`}
             </span>
-            <span className="text-[11px] text-[#64748B] font-mono">Local MVP</span>
+            <span className="text-[11px] text-[#64748B] font-mono">Completed documents</span>
           </div>
-          <div className="text-[11px] text-[#64748B] mt-1 font-mono">Node / Express Extractor</div>
+          <div className="text-[11px] text-[#64748B] mt-1 font-mono">{metrics?.processingSamples || 0} measured durations · excludes queue wait</div>
         </div>
 
         <div className="bg-white dark:bg-[#1E293B] border border-[#E2E8F0] dark:border-[#334155] rounded-[6px] p-4">
           <div className="text-[12px] font-medium text-[#64748B] dark:text-[#94A3B8] mb-1">
-            DLQ Warnings / Exceptions
+            Failure / Warning Events
           </div>
           <div className="flex items-baseline justify-between">
             <span className="text-[26px] font-bold text-[#E11D48] dark:text-[#F87171] tabular-nums">
-              {events.filter(e => e.status === 'Failed' || e.status === 'Warning').length}
+              {flaggedEvents}
             </span>
-            <Badge variant={events.filter(e => e.status === 'Failed' || e.status === 'Warning').length > 0 ? 'error' : 'success'}>
-              {events.filter(e => e.status === 'Failed' || e.status === 'Warning').length > 0 ? 'Needs Review' : 'Clean'}
+            <Badge variant={flaggedEvents > 0 ? 'error' : 'neutral'}>
+              {flaggedEvents > 0 ? 'Needs Review' : 'None recorded'}
             </Badge>
           </div>
-          <div className="text-[11px] text-[#64748B] mt-1 font-mono">{events.filter(e => e.status === 'Failed' || e.status === 'Warning').length} items routed to DLQ</div>
+          <div className="text-[11px] text-[#64748B] mt-1 font-mono">{flaggedEvents} activity events flagged</div>
         </div>
       </div>
 
@@ -221,13 +230,7 @@ export const ActivityPage: React.FC = () => {
                   className="h-[36px] px-2.5 bg-white dark:bg-[#1E293B] border border-[#CBD5E1] dark:border-[#475569] rounded-[4px] text-[12px] font-medium text-[#334155] dark:text-[#E2E8F0] focus:outline-none"
                 >
                   <option value="All">All Event Types</option>
-                  <option value="OCR Extraction">OCR Extraction</option>
-                  <option value="Q&A">Document Q&A</option>
-                  <option value="Ingestion">Batch Ingestion</option>
-                  <option value="Classification">Classification</option>
-                  <option value="Warning">Exceptions / DLQ</option>
-                  <option value="Deleted">Document Deleted</option>
-                  <option value="API Key">API Key</option>
+                  {eventTypes.map(event => <option key={event} value={event}>{event}</option>)}
                 </select>
 
                 {/* Status Filter */}
@@ -248,10 +251,8 @@ export const ActivityPage: React.FC = () => {
                   onChange={(e) => setSelectedNode(e.target.value)}
                   className="h-[36px] px-2.5 bg-white dark:bg-[#1E293B] border border-[#CBD5E1] dark:border-[#475569] rounded-[4px] text-[12px] font-medium text-[#334155] dark:text-[#E2E8F0] focus:outline-none"
                 >
-                  <option value="All">All Nodes</option>
-                  <option value="System">Processing Worker</option>
-
-                  <option value="Alex Parker">Alex Parker (User)</option>
+                  <option value="All">All Actors</option>
+                  {actors.map(actor => <option key={actor} value={actor}>{actor}</option>)}
                 </select>
               </div>
             </div>

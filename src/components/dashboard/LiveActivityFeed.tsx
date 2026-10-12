@@ -47,7 +47,7 @@ export const LiveActivityFeed: React.FC = () => {
           <span>Live Activity</span>
         </div>
       }
-      subtitle="Live local document processing events"
+      subtitle="Live document processing events"
       headerAction={
         <Link
           to="/activity"

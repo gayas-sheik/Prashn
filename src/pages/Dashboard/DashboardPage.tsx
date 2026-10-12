@@ -16,6 +16,7 @@ import { DocumentTable } from '../../components/documents/DocumentTable';
 import { DocumentPreviewDrawer } from '../../components/documents/DocumentPreviewDrawer';
 import type { DocumentItem } from '../../types';
 import { getDocuments, deleteDocument, retryDocument } from '../../services/api/documentService';
+import { matchesDocumentSearch } from '../../services/documentSearch';
 
 export const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
@@ -52,9 +53,7 @@ export const DashboardPage: React.FC = () => {
 
   // Filter documents
   const filteredDocuments = documents.filter((doc) => {
-    const matchesSearch = 
-      (doc.name || doc.originalFileName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (doc.id || '').toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = matchesDocumentSearch(doc, searchQuery);
     
     const docType = doc.documentType || doc.type || 'Unknown';
     const matchesType = selectedTypeFilter === 'All' || docType === selectedTypeFilter;
@@ -85,7 +84,7 @@ export const DashboardPage: React.FC = () => {
             Dashboard
           </h1>
           <p className="text-[13px] text-[#64748B] dark:text-[#94A3B8] mt-0.5">
-            Overview of your document processing activity across the local processing pipeline.
+            Overview of your document processing activity.
           </p>
         </div>
 

@@ -49,11 +49,16 @@ export const DocumentDetailsPage: React.FC = () => {
     return () => { cancelled = true; clearInterval(timer); };
   }, [id]);
 
-  const handleCopyJson = () => {
+  const handleCopyJson = async () => {
     if (docItem) {
-      navigator.clipboard.writeText(JSON.stringify(docItem, null, 2));
-      setCopiedJson(true);
-      setTimeout(() => setCopiedJson(false), 2000);
+      try {
+        await navigator.clipboard.writeText(JSON.stringify(docItem, null, 2));
+        setCopiedJson(true);
+        setTimeout(() => setCopiedJson(false), 2000);
+      } catch {
+        setCopiedJson(false);
+        setError('Unable to copy JSON. Allow clipboard access or select the JSON in the Raw OCR JSON tab.');
+      }
     }
   };
 
@@ -164,7 +169,7 @@ export const DocumentDetailsPage: React.FC = () => {
               icon={<Code className="w-3.5 h-3.5" />}
               onClick={handleCopyJson}
             >
-              {copiedJson ? 'Copied JSON' : 'Export JSON'}
+              {copiedJson ? 'Copied JSON' : 'Copy JSON'}
             </Button>
             <Button
               size="sm"
@@ -198,6 +203,7 @@ export const DocumentDetailsPage: React.FC = () => {
               <div className="flex items-center gap-1.5 font-mono text-[#475569] dark:text-[#94A3B8]">
                 <button
                   onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  aria-label="Previous page"
                   disabled={currentPage === 1}
                   className="p-1 rounded-[4px] border border-[#CBD5E1] dark:border-[#475569] disabled:opacity-40"
                 >
@@ -208,6 +214,7 @@ export const DocumentDetailsPage: React.FC = () => {
                 </span>
                 <button
                   onClick={() => setCurrentPage((p) => Math.min(docItem.pagesCount, p + 1))}
+                  aria-label="Next page"
                   disabled={currentPage === docItem.pagesCount}
                   className="p-1 rounded-[4px] border border-[#CBD5E1] dark:border-[#475569] disabled:opacity-40"
                 >

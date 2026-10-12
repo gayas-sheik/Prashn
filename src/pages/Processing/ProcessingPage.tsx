@@ -81,7 +81,7 @@ export const ProcessingPage: React.FC = () => {
             Processing Pipeline & Queue
           </h1>
           <p className="text-[13px] text-[#64748B] dark:text-[#94A3B8] mt-0.5">
-            Live document status across the local extraction and classification pipeline.
+            Live document status across extraction and classification.
           </p>
         </div>
 
@@ -203,7 +203,7 @@ export const ProcessingPage: React.FC = () => {
                       )}
                       {isFailed && (
                         <Badge variant="error" icon={<AlertTriangle className="w-3 h-3" />}>
-                          Failed (DLQ)
+                          Failed
                         </Badge>
                       )}
 

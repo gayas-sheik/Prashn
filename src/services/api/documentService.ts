@@ -1,4 +1,4 @@
-import type { DocumentItem, QAMessage, StagedUploadFile, ActivityEvent } from '../../types';
+import type { DocumentItem, QAMessage, StagedUploadFile, ActivityEvent, DocumentMetrics } from '../../types';
 import { apiClient, apiResponse, ApiError } from './apiClient';
 
 // Map backend Document shape to frontend DocumentItem shape
@@ -31,6 +31,10 @@ function formatBytes(bytes: number): string {
 export async function getDocuments(): Promise<DocumentItem[]> {
   const data = await apiClient('/documents');
   return (data.documents || []).map(mapDocument);
+}
+
+export async function getDocumentMetrics(): Promise<DocumentMetrics> {
+  return (await apiClient('/documents/metrics')).metrics;
 }
 
 export async function getDocument(id: string, signal?: AbortSignal): Promise<DocumentItem | null> {

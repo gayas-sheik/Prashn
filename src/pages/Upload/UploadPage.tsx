@@ -186,7 +186,7 @@ export const UploadPage: React.FC = () => {
           Upload Documents
         </h1>
         <p className="text-[13px] text-[#64748B] dark:text-[#94A3B8] mt-0.5">
-          Upload one or multiple documents for automated local OCR, classification, and metadata extraction.
+          Upload one or multiple documents for automated OCR, classification, and metadata extraction.
         </p>
       </div>
 
@@ -198,7 +198,7 @@ export const UploadPage: React.FC = () => {
             Automatic Classification Enabled:
           </span>{' '}
           <span className="text-[#334155] dark:text-[#CBD5E1]">
-            You do not need to specify document types manually. Prashn's local processing pipeline will automatically detect invoices, receipts, and structured forms upon ingestion.
+            You do not need to specify document types manually. Prashn will automatically detect invoices, receipts, and structured forms upon ingestion.
           </span>
         </div>
       </div>
@@ -266,7 +266,7 @@ export const UploadPage: React.FC = () => {
         </p>
         <div className="flex items-center justify-center gap-1.5 text-[11px] text-[#059669] mt-3">
           <ShieldCheck className="w-4 h-4" />
-          <span>Original documents are stored locally and accessible only through your account.</span>
+          <span>Original documents are private and accessible only through your account.</span>
         </div>
       </div>
 

@@ -51,11 +51,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggleCollapse })
                     Prashn
                   </span>
                   <span className="px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider rounded-[2px] bg-[#EFF6FF] text-[#1E40AF] dark:bg-[#1E3A8A40] dark:text-[#93C5FD]">
-                    Local
+                    Workspace
                   </span>
                 </div>
                 <span className="text-[10px] text-[#64748B] dark:text-[#94A3B8] font-mono">
-                  Local Workspace
+                  Document Workspace
                 </span>
               </div>
             )}
@@ -108,9 +108,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggleCollapse })
             <div className="flex items-center justify-between text-[#64748B] dark:text-[#94A3B8] mb-1 font-mono">
               <span className="flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#059669] animate-pulse" />
-                Local processing
+                Document processing
               </span>
-              <span>Local MVP</span>
+              <span>Account scoped</span>
             </div>
             <div className="flex items-center gap-1 text-[10px] text-[#475569] dark:text-[#94A3B8]">
               <ShieldCheck className="w-3.5 h-3.5 text-[#059669]" />
@@ -118,7 +118,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggleCollapse })
             </div>
           </div>
         ) : (
-          <div className="flex justify-center p-1" title="Local processing workspace">
+          <div className="flex justify-center p-1" title="Document processing workspace">
             <span className="w-2 h-2 rounded-full bg-[#059669] animate-pulse" />
           </div>
         )}

@@ -135,7 +135,7 @@ export const LoginPage: React.FC = () => {
         {/* Security badge */}
         <div className="mt-8 pt-4 border-t border-[#E2E8F0] dark:border-[#334155] flex items-center justify-center gap-1.5 text-[11px] text-[#059669]">
           <ShieldCheck className="w-4 h-4" />
-          <span>Local accounts · Documents are scoped to your user</span>
+          <span>Documents are private to your account</span>
         </div>
       </div>
     </div>

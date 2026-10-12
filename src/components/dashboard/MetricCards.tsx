@@ -13,17 +13,18 @@ export const MetricCards: React.FC<MetricCardsProps> = ({ documents }) => {
   const processing = documents.filter(d => ['Uploaded', 'Queued', 'Processing', 'Classifying', 'Extracting information'].includes(d.status)).length;
   const completed = documents.filter(d => d.status.startsWith('Completed')).length;
   const failed = documents.filter(d => d.status === 'Failed').length;
+  const finished = completed + failed;
 
   const metrics = [
     {
       title: 'Total Documents',
       value: total.toString(),
-      change: 'Lifetime uploads',
+      change: 'Current documents',
       badge: `${total} active`,
       badgeVariant: 'primary' as const,
       icon: Files,
       accentColor: 'text-[#1E40AF] dark:text-[#60A5FA]',
-      subtext: 'Ingested across local system',
+      subtext: 'In your account',
     },
     {
       title: 'Processing',
@@ -34,12 +35,12 @@ export const MetricCards: React.FC<MetricCardsProps> = ({ documents }) => {
       icon: Cpu,
       pulse: processing > 0,
       accentColor: 'text-[#0284C7] dark:text-[#38BDF8]',
-      subtext: 'Local execution',
+      subtext: 'Background processing',
     },
     {
       title: 'Completed',
       value: completed.toString(),
-      change: total > 0 ? `${Math.round((completed/total)*100)}% success rate` : '0% success rate',
+      change: finished > 0 ? `${Math.round((completed/finished)*100)}% success rate` : 'No finished documents',
       badge: 'Extracted & Indexed',
       badgeVariant: 'success' as const,
       icon: CheckCircle2,

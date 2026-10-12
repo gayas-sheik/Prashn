@@ -165,12 +165,12 @@ export const DocumentQAPage: React.FC = () => {
                   {document.type}
                 </span>
                 <span className="text-[11px] text-[#64748B] dark:text-[#94A3B8] font-mono">
-                  {document.pagesCount} Pages · Local storage
+                  {document.pagesCount} Pages · {document.s3Uri?.startsWith('s3://') ? 'Cloud storage' : 'Local storage'}
                 </span>
               </div>
               <div className="text-[11px] text-[#059669] flex items-center gap-1 font-medium mt-0.5">
                 <CheckCircle2 className="w-3.5 h-3.5" />
-                <span>Processed document</span>
+                <span>{document.status === 'Completed' ? 'Processed document' : document.status}</span>
               </div>
             </div>
           </div>

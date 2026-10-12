@@ -47,6 +47,8 @@ jobs:
         run: |
           npm run build
           npm run lint
+      - name: Frontend search regression checks
+        run: npm test
       - name: Backend regression checks
         run: npm --prefix backend test
       - name: AWS adapters against local emulator

@@ -65,6 +65,21 @@ export interface ActivityEvent {
   logJson?: Record<string, any>;
 }
 
+export interface DocumentMetrics {
+  total: number;
+  queued: number;
+  active: number;
+  completed: number;
+  failed: number;
+  totalBytes: number;
+  concurrency: number;
+  storageMode: 'local' | 's3';
+  ocrEngine: string;
+  qaMode: string;
+  averageProcessingSeconds: number | null;
+  processingSamples: number;
+}
+
 export interface QACitation {
   id: string;
   source: string;

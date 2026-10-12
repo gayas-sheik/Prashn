@@ -19,6 +19,7 @@ import { DocumentTable } from '../../components/documents/DocumentTable';
 import { DocumentPreviewDrawer } from '../../components/documents/DocumentPreviewDrawer';
 import type { DocumentItem } from '../../types';
 import { getDocuments, deleteDocument, retryDocument } from '../../services/api/documentService';
+import { matchesDocumentSearch } from '../../services/documentSearch';
 
 export const DocumentsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -108,11 +109,7 @@ export const DocumentsPage: React.FC = () => {
 
   // Filtering
   const filteredDocuments = documents.filter((doc) => {
-    const matchesSearch =
-      (doc.name || doc.originalFileName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (doc.id || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (doc.uploaderName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (doc.documentType || doc.type || '').toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = matchesDocumentSearch(doc, searchQuery);
 
     const matchesStatus =
       statusFilter === 'All' ? true : statusFilter === 'Processing' ? ['Processing', 'Classifying', 'Extracting information'].includes(doc.status) : doc.status === statusFilter;
@@ -158,7 +155,7 @@ export const DocumentsPage: React.FC = () => {
             Documents
           </h1>
           <p className="text-[13px] text-[#64748B] dark:text-[#94A3B8] mt-0.5">
-            Manage, search, and review your processed cloud document repository.
+            Manage, search, and review your processed documents.
           </p>
         </div>
 

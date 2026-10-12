@@ -104,7 +104,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({ open, onClose }) => {
           </div>
           <div className="flex items-center gap-1.5 text-[11px] text-[#059669]">
             <ShieldCheck className="w-4 h-4" />
-            <span>Account-scoped local documents</span>
+            <span>Account-scoped documents</span>
           </div>
         </div>
       </div>

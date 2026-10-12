@@ -7,6 +7,7 @@ import { Document } from '../types';
 import { documentProcessor as processor } from '../processing/processor';
 import { config } from '../config/env';
 import { DynamoDocumentRepository } from '../repositories/dynamodb.repositories';
+import { processingTimeMetrics } from '../services/document.metrics';
 
 const docRepo = new DocumentRepository();
 const activityRepo = new ActivityRepository();
@@ -50,6 +51,7 @@ export const getDocumentMetrics = async (req: Request, res: Response) => {
     completed: count(['Completed']), failed: count(['Failed']), totalBytes: docs.reduce((sum, doc) => sum + doc.fileSize, 0),
     concurrency: config.processingConcurrency, maxPages: config.maxPages, maxUploadBytes: 10 * 1024 * 1024,
     storageMode: config.storageMode, ocrEngine: 'Tesseract.js', qaMode: config.qaModel ? 'ollama' : 'extractive',
+    ...processingTimeMetrics(docs),
   } });
 };
 

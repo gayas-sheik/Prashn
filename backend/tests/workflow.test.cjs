@@ -48,6 +48,22 @@ test('digital multipage PDF preserves text, columns, fields, currency and line i
   assert.equal(invoice.lineItems[0].quantity, '2');
 });
 
+test('processing metrics use measured completed durations, excluding pending and malformed values', () => {
+  const { processingTimeMetrics } = require('../dist/services/document.metrics');
+  const docs = [
+    { status: 'Completed', processingDuration: '0.2s' },
+    { status: 'Completed', processingDuration: '1.4s' },
+    { status: 'Failed', processingDuration: '9s' },
+    { status: 'Processing', processingDuration: '20s' },
+    ...['', '-1s', 'unknown', 'Infinitys'].map(processingDuration => ({ status: 'Completed', processingDuration })),
+  ];
+  const measured = processingTimeMetrics(docs);
+  assert.equal(measured.processingSamples, 2);
+  assert.ok(Math.abs(measured.averageProcessingSeconds - 0.8) < 1e-10);
+  assert.deepEqual(processingTimeMetrics([]), { processingSamples: 0, averageProcessingSeconds: null });
+  assert.deepEqual(processingTimeMetrics([{ status: 'Completed', processingDuration: '0.0s' }]), { processingSamples: 1, averageProcessingSeconds: 0 });
+});
+
 test('structured extraction never invents amounts, OCR corrections, or currency', () => {
   const missing = structured.extractFields('INVOICE\nTout sco\nGrand Total:\nXYZ Seller', 'Invoice');
   assert.ok(!missing.extractedFields.some(field => field.label === 'Total'));
@@ -144,6 +160,9 @@ test('API upload, processing, auth isolation, original bytes, Q&A, retry and del
     await new Promise(resolve => setTimeout(resolve, 100));
   }
   assert.equal(doc.status, 'Completed', doc.failureReason);
+  const ownerMetrics = (await (await request('/documents/metrics')).json()).metrics;
+  assert.equal(ownerMetrics.processingSamples, 1);
+  assert.equal(ownerMetrics.averageProcessingSeconds, Number(doc.processingDuration.slice(0, -1)));
   assert.equal(doc.pages.length, 2); assert.equal(doc.lineItems.length, 2); assert.equal(doc.sha256.length, 64);
   assert.match(await fs.readFile(path.join(run, 'processed', `${uploadedId}.txt`), 'utf8'), /Warranty covers/);
   for (const endpoint of [`/documents/${uploadedId}`, `/documents/${uploadedId}/file`, `/documents/${uploadedId}/questions`]) assert.equal((await request(endpoint, {}, otherToken)).status, 404);
@@ -167,6 +186,8 @@ test('API upload, processing, auth isolation, original bytes, Q&A, retry and del
   assert.equal((await request('/documents/upload', { method: 'POST', body: bad })).status, 415);
   const metrics = await (await request('/documents/metrics', {}, otherToken)).json();
   assert.equal(metrics.metrics.total, 0);
+  assert.equal(metrics.metrics.processingSamples, 0);
+  assert.equal(metrics.metrics.averageProcessingSeconds, null);
   assert.equal((await request('/auth/register', json({ email: ['invalid'], password: 123, fullName: {} }), '')).status, 400);
 });
 
